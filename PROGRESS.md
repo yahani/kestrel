@@ -16,7 +16,7 @@ _Last updated: 2026-10-18, end of session 5. All 12 requirements are built; one 
 | F5 | Store | ✅ done | `store.py` | `products` + append-only `observations` (UPDATE/DELETE blocked by triggers), prices stored as TEXT Decimals, status values checked by the DB. Products removed from config are marked inactive, history kept. `database:` path added to config. In-memory scratch copy for `--dry-run`. Decimals stored in plain notation (`100`, never `1E+2`). |
 | F6 | Detect changes | ✅ done | `changes.py` | Compared with the last *successful* observation: price up/down with signed % (threshold inclusive, default 1%), out of stock, back in stock, title change, currency change, new failure (repeat failures left to F12). First observation → no changes. Stock is compared with the last observation whose stock was known, so `in → unknown → out` still reports out of stock. |
 | F7 | Compare with own price | ✅ done | `changes.py` | Price changes carry an `undercut` flag when the new price is below `my_price`. A separate `undercut` change fires only when a move under the threshold crosses below `my_price`, so one event is never reported twice. Only flagged when the competitor's currency matches the site currency (`my_price` is assumed to be in it). |
-| F8 | Alert | ✅ done (real send through Gmail accepted) | `alerts.py` | One digest per run as text + HTML email (sections: Undercutting you, Price changes, Stock, Other, Couldn't check, Site health) and a Slack Block Kit payload. Competitor text is escaped. Not sent when nothing changed unless `always_send_summary` (a newly failing site also triggers a send). SMTP via STARTTLS/SSL (trusting the system store **plus certifi**, since python.org's macOS Python ships with no root certificates) with secrets from env/`.env`; Slack sender built, off in config. `run` sends it; exits 1 if a channel fails. **A digest that fails to send is carried into the next one that gets through, exactly once, per channel**, under "From earlier runs that couldn't be sent" with the original run's time (append-only `runs` + `deliveries` tables). |
+| F8 | Alert | ✅ done (real send through Gmail accepted) | `alerts.py` | One digest per run as text + HTML email (sections: Undercutting you, Price changes, Stock, Other, Couldn't check, Site health) and a Slack Block Kit payload. Competitor text is escaped. Not sent when nothing changed unless `always_send_summary` (a newly failing site also triggers a send). SMTP via STARTTLS/SSL (trusting the system store **plus certifi**, since python.org's macOS Python ships with no root certificates) with secrets from env/`.env`; Slack sender built, off in config. `run` sends it; exits 1 if a channel fails. Delivery details give a **count, never addresses** (`sent to 1 recipient`), and SMTP errors are scrubbed of addresses, because logs are public artifacts on Actions. **A digest that fails to send is carried into the next one that gets through, exactly once, per channel**, under "From earlier runs that couldn't be sent" with the original run's time (append-only `runs` + `deliveries` tables). |
 | F9 | Export to Sheets | ✅ done (real export to Google Sheets verified 2026-10-18) | `sheets.py` | Service account from `GOOGLE_SERVICE_ACCOUNT_JSON`. Appends each run's observations to "Observations" and rewrites "Latest" (one row per active product, with an `undercuts_me` column). Creates missing tabs with a frozen header. RAW writes, so a competitor title can't run as a formula. Accepts the sheet ID or its URL. Price columns are formatted `0.00`. Tested against a fake whose method signatures are checked against gspread 6.2.1, and against a real sheet: run `20261018T100321Z-318c90` wrote 4 rows, and Latest matched the database with 0 mismatches. |
 | F10 | Schedule | 🟡 manual trigger ✅; first scheduled run due 2026-10-19 06:17 UTC | `.github/workflows/daily.yml`, `scripts/ci_config.py` | Daily cron at 06:17 UTC plus a manual **Run workflow** button. One run at a time. Restores `tracker.db` from the `data` branch and saves it back even when the run fails (force-pushed as a single commit, so the repo doesn't grow). Email and Sheets come from repository secrets; the recipient is never committed. Logs are uploaded as an artifact kept 30 days. Two manual runs passed (39120192167, 39120377564): the first started empty and saved 40 KB to `data`; the second restored it and saved 49 KB. The DB now holds 2 runs and 40 observations, and `data` is still 1 commit. |
 | F11 | CLI | ✅ done | `cli.py`, `pipeline.py` | `run [--dry-run]`, `check-config` (also warns about missing secrets for enabled channels), `test-selectors <url> [--html] [--save]`, `history <url\|sku\|url part> [--limit]`. `--dry-run` previews the digest, saves nothing and sends nothing. Secrets are read from `.env` next to the config or in the current folder; real env vars win. |
@@ -41,18 +41,18 @@ Run on 2026-10-18 with `uv run pytest --cov=tracker` (session 5, after the daily
 | `test_config.py` | 37 | ✅ pass |
 | `test_fetch.py` | 32 | ✅ pass |
 | `test_parse.py` | 85 | ✅ pass |
-| `test_cli.py` | 41 | ✅ pass |
+| `test_cli.py` | 42 | ✅ pass |
 | `test_store.py` | 29 | ✅ pass |
 | `test_changes.py` | 46 | ✅ pass |
 | `test_mock_site.py` | 18 | ✅ pass |
 | `test_pipeline.py` | 14 | ✅ pass |
 | `test_report.py` | 13 | ✅ pass |
-| `test_alerts.py` | 39 | ✅ pass |
+| `test_alerts.py` | 41 | ✅ pass |
 | `test_sheets.py` | 23 | ✅ pass |
 | `test_carryover.py` | 9 | ✅ pass |
 | `test_logs.py` | 7 | ✅ pass |
-| `test_ci_config.py` | 4 | ✅ pass |
-| **Total** | **396** | **✅ all pass** |
+| `test_ci_config.py` | 7 | ✅ pass |
+| **Total** | **403** | **✅ all pass** |
 
 Coverage: 100% on every module in `src/tracker/` (spec target is 80%). Excluded: the
 Playwright loader and `sheets.open_spreadsheet`, which need a real browser or real Google
@@ -108,6 +108,11 @@ All five build sessions are done. What's left:
 
 ## 4. Blocked or waiting on you
 
+- **Review of `e52f357` (IN PROGRESS, 2 must-fix):**
+  - ✅ **Must-fix 2:** the recipient is never printed or logged. Checked the 2 existing
+    artifacts and console logs first: no addresses had leaked, because neither run sent
+    email.
+  - 🔄 **Must-fix 1:** the data-branch restore could wipe history. Next.
 - **Waiting on GitHub:** the first scheduled Daily run, 2026-10-19 06:17 UTC.
 - **Waiting on you:** a review of session 5 (see the session report), and the portfolio
   deliverables above.

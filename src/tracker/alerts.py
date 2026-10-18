@@ -7,6 +7,7 @@ environment (or a .env file loaded by the CLI).
 from __future__ import annotations
 
 import html
+import re
 import smtplib
 import ssl
 from collections.abc import Callable, Mapping, Sequence
@@ -360,8 +361,24 @@ def send_email(
             "login failed: check SMTP_USER and SMTP_PASSWORD (Gmail needs an app password)",
         )
     except (smtplib.SMTPException, OSError) as exc:
-        return Delivery("email", False, f"{type(exc).__name__}: {exc}")
-    return Delivery("email", True, f"sent to {', '.join(to)}")
+        detail = _scrub(f"{type(exc).__name__}: {exc}", to, [settings.user, settings.sender])
+        return Delivery("email", False, detail)
+    n = len(to)
+    # A count, never the addresses: details are printed and logged, and on GitHub Actions the
+    # logs of a public repo can be downloaded by anyone.
+    return Delivery("email", True, f"sent to {n} recipient{'' if n == 1 else 's'}")
+
+
+_ADDRESS = re.compile(r"[\w.%+-]+@[\w-]+(?:\.[\w-]+)+")
+
+
+def _scrub(text: str, recipients: list[str], senders: list[str | None]) -> str:
+    """Remove email addresses (recipients, SMTP user, sender) from an error message."""
+    for address in recipients:
+        text = text.replace(address, "<recipient>")
+    for address in filter(None, senders):
+        text = text.replace(address, "<sender>")
+    return _ADDRESS.sub("<address>", text)
 
 
 def send_slack(digest: Digest, webhook_url: str, client: httpx.Client | None = None) -> Delivery:

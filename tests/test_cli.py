@@ -1,3 +1,4 @@
+import json
 import os
 from pathlib import Path
 
@@ -358,7 +359,7 @@ def test_run_emails_one_digest_when_something_changed(email_cli):
         shop.set(**change)
     second = invoke("run", "-c", config)
     assert second.exit_code == 0, second.output
-    assert "email: ✓ sent to owner@example.com" in second.output
+    assert "email: ✓ sent to 1 recipient" in second.output
     [message] = smtp.sent
     assert message["Subject"].endswith(": 3 changes, 1 undercut")
     body = message.get_body(("plain",)).get_content()
@@ -535,3 +536,19 @@ def test_log_dir_and_retention_come_from_config(shop_cli, tmp_path, _close_logs)
     config.write_text(yaml.safe_dump(data, sort_keys=False))
     invoke("run", "-c", config)
     assert list((tmp_path / "elsewhere").glob("tracker-*.jsonl"))
+
+
+def test_recipient_never_printed_or_logged(email_cli, _close_logs):
+    """Review must-fix 2: a public repo's logs and artifacts must not reveal who gets the digest."""
+    shop, config, smtp = email_cli
+    edit_config(config, alerts__email={"enabled": True, "to": ["secret-recipient@example.com"]})
+    first = invoke("run", "-c", config)
+    shop.set("blue-mug", price="19.50")
+    second = invoke("run", "-c", config)
+
+    assert len(smtp.sent) == 1  # it really was sent to them
+    assert smtp.sent[0]["To"] == "secret-recipient@example.com"
+    _, lines = log_lines(config)
+    everything = first.output + second.output + json.dumps(lines)
+    assert "secret-recipient@example.com" not in everything
+    assert SMTP_ENV["SMTP_USER"] not in everything

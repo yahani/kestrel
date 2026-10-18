@@ -20,6 +20,9 @@ def main(source: str, target: str) -> None:
     data = yaml.safe_load(Path(source).read_text(encoding="utf-8"))
 
     recipients = [a.strip() for a in os.environ.get("DIGEST_EMAIL_TO", "").split(",") if a.strip()]
+    if os.environ.get("GITHUB_ACTIONS") == "true":
+        for address in recipients:  # mask each one, not just the whole comma-separated secret
+            print(f"::add-mask::{address}")
     data.setdefault("alerts", {})["email"] = {"enabled": bool(recipients), "to": recipients}
 
     sheet = os.environ.get("SHEETS_SPREADSHEET_ID", "").strip()
@@ -34,4 +37,7 @@ def main(source: str, target: str) -> None:
 
 
 if __name__ == "__main__":
-    main(*sys.argv[1:3])
+    if len(sys.argv) != 3:
+        print("usage: python scripts/ci_config.py SOURCE TARGET", file=sys.stderr)
+        sys.exit(2)
+    main(sys.argv[1], sys.argv[2])

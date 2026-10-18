@@ -281,7 +281,7 @@ def test_send_email_builds_multipart_message(report_after):
     smtp = FakeSMTP()
     result = send_email(digest, ["a@example.com", "b@example.com"], smtp_settings(ENV), smtp)
 
-    assert result == Delivery("email", True, "sent to a@example.com, b@example.com")
+    assert result == Delivery("email", True, "sent to 2 recipients")
     assert smtp.logins == [("tracker@example.com", "app-password")]
     [message] = smtp.sent
     assert message["Subject"] == digest.subject
@@ -444,3 +444,29 @@ def test_carried_items_are_escaped_and_labelled():
     slack_text = digest.slack["blocks"][1]["text"]["text"]
     assert "<script>" not in slack_text
     assert "(17 Oct 2026 06:00 UTC)" in slack_text
+
+
+def test_delivery_detail_never_contains_addresses():
+    """Delivery details are printed and logged, and logs are public artifacts on Actions."""
+    single = send_email(
+        build_digest(report_with(), TODAY), ["a@x.com"], smtp_settings(ENV), FakeSMTP()
+    )
+    assert single.detail == "sent to 1 recipient"
+
+
+def test_smtp_errors_are_scrubbed_of_addresses_and_username():
+    refused = smtplib.SMTPRecipientsRefused({"secret@x.com": (550, b"no such user secret@x.com")})
+    result = send_email(
+        build_digest(report_with(), TODAY), ["secret@x.com"], smtp_settings(ENV), FakeSMTP(refused)
+    )
+    assert not result.ok
+    assert "secret@x.com" not in result.detail
+    assert "<recipient>" in result.detail
+
+    sender = smtplib.SMTPSenderRefused(
+        553, b"tracker@example.com not allowed", "tracker@example.com"
+    )
+    result = send_email(
+        build_digest(report_with(), TODAY), ["a@x.com"], smtp_settings(ENV), FakeSMTP(sender)
+    )
+    assert "tracker@example.com" not in result.detail  # SMTP_USER is private too

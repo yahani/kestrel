@@ -57,3 +57,23 @@ def test_everything_else_is_kept(tmp_path):
     for key in ("database", "fetch", "sites", "products", "logs"):
         assert built[key] == original[key]
     assert len(built["products"]) == 20
+
+
+def test_each_recipient_is_masked_on_github_actions(tmp_path):
+    # The secret is "a@example.com, b@example.com", but each address may appear on its own.
+    _, stdout = build(
+        tmp_path, {"DIGEST_EMAIL_TO": "a@example.com, b@example.com", "GITHUB_ACTIONS": "true"}
+    )
+    assert "::add-mask::a@example.com" in stdout
+    assert "::add-mask::b@example.com" in stdout
+
+
+def test_no_mask_lines_outside_actions(tmp_path):
+    _, stdout = build(tmp_path, {"DIGEST_EMAIL_TO": "a@example.com"})
+    assert "add-mask" not in stdout
+
+
+def test_usage_without_arguments():
+    result = subprocess.run([sys.executable, str(SCRIPT)], capture_output=True, text=True)
+    assert result.returncode == 2
+    assert "usage: python scripts/ci_config.py SOURCE TARGET" in result.stderr
