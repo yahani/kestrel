@@ -77,6 +77,8 @@ in writing. Don't use it on big marketplaces such as Amazon.
 | `tracker check-config` | Validate the config and say which secrets are missing for enabled channels. |
 | `tracker test-selectors <url> [--html FILE] [--save FILE]` | Show what each selector matched on one page and how it was read. |
 | `tracker history <sku\|url\|part of url> [--limit N]` | Price and stock history for one product, newest first. |
+| `tracker data restore\|save`, `tracker ci-config` | For scheduled runs: keep the history on a git branch, and build the run's config from secrets. |
+| `tracker --version` | The installed release. |
 
 All commands take `-c/--config` (default `config.yaml`). The database (`tracker.db`) and
 `logs/` sit next to the config file.
@@ -112,8 +114,11 @@ competitors. [docs/SETUP.md](docs/SETUP.md) has the commands for setting the sec
 
 > **Before tracking real products, use a private repository.** In a public repo, anyone can
 > download the `data` branch's database, which holds your own prices (`my_price`) and every
-> competitor observation. Private repos are free at this volume too: about 2 Actions
-> minutes a day against 2,000 a month.
+> competitor observation. For client work, create a private repo from the **client template**
+> (`yahani/price-tracker-client-template`, private; its `CLIENT_SETUP.md` walks through
+> setup, upgrades and handover). It installs this tracker at a pinned release tag (see
+> [CHANGELOG.md](CHANGELOG.md)) and refuses to run in a public repo. Private repos are free
+> at this volume too: about 2 Actions minutes a day against 2,000 a month.
 >
 > **GitHub turns off scheduled workflows in public repos after 60 days without activity**
 > and emails the repo owner. To turn it back on, go to **Actions → Daily run → Enable
@@ -125,6 +130,8 @@ competitors. [docs/SETUP.md](docs/SETUP.md) has the commands for setting the sec
 - [docs/DEMO.md](docs/DEMO.md): a 2-minute demo script.
 - [ARCHITECTURE.md](ARCHITECTURE.md): how it fits together, with diagrams.
 - [PROGRESS.md](PROGRESS.md): build status against the spec's requirements.
+- [CHANGELOG.md](CHANGELOG.md): releases. Install one with
+  `uv tool install --python 3.12 git+https://github.com/yahani/price-tracker@v1.0.0`.
 
 ## Development
 

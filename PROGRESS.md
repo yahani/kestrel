@@ -173,8 +173,20 @@ Approved 2026-10-18. Decisions:
 - [x] The version comes from package metadata only. Installs cleanly with `uv tool install --python 3.12 git+…@<commit>`, from an empty cache and a throwaway tool folder. Every command works outside the repo; only the `tracker` package is installed. `--version` and the User-Agent both say 1.0.0. (Re-check from GitHub once the tag is pushed.)
 - [x] Release v1.0.0 prepared: `pyproject.toml` set to 1.0.0, and `CHANGELOG.md` written.
   - [ ] Tag `v1.0.0` and its GitHub Release: waiting for your OK.
-- [ ] Template repo at `../price-tracker-client-template`: config, workflows, guards,
-  `CLIENT_SETUP.md`.
+- [x] Template built locally at `../price-tracker-client-template`, as its own git repo
+  with 3 commits; gitleaks is clean:
+  - `config.yaml` with placeholders, marked as private client data.
+  - `TRACKER_VERSION` (v1.0.0), `.gitignore`, `README.md`, `CLIENT_SETUP.md`.
+  - `daily.yml` with a **guard** job (API privacy check, template skip, placeholder check)
+    and a **run** job, plus `check.yml`.
+  - The guard's shell logic was tested under `bash -e` with a fake `gh`: template → skip,
+    public → fail, placeholders → fail (all 6 lines flagged, no comment lines), private and
+    filled in → ok, API failure → fail closed.
+  - The config validates with the installed v1.0.0.
+  - Not checked: actionlint (it wouldn't build; same missing-certificates problem), so the
+    real run in the test client repo is the check.
 - [ ] Push this repo and the tag (your OK) → create the private template repo (your OK) →
   test client repo and one run by hand.
-- [ ] ARCHITECTURE.md diagram, README warning → `CLIENT_SETUP.md`.
+- [x] ARCHITECTURE.md: a "public package → private client repos" diagram and data table.
+  The README warning points to the template and its `CLIENT_SETUP.md`, and lists the new
+  commands and `CHANGELOG.md`.

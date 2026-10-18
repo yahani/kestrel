@@ -423,6 +423,59 @@ line has `ts`, `level`, `logger` and `msg`, plus extra fields from
 
 A dry run writes no log, in keeping with "no writes".
 
+## Client repositories (public package → private repos)
+
+This repo stays public: code, docs, and a demo on practice sites only. Each client gets a
+**private** repo created from the private template `yahani/price-tracker-client-template`.
+Client data never touches this repo.
+
+```mermaid
+flowchart LR
+    subgraph public["Public: yahani/price-tracker"]
+        code["tracker package<br/>src/tracker"]
+        tags["release tags<br/>v1.0.0, …"]
+        demo["demo workflow<br/>(practice-site books)"]
+        code --> tags
+    end
+    subgraph template["Private template"]
+        tpl["config.yaml (placeholders)<br/>TRACKER_VERSION<br/>daily.yml · check.yml<br/>CLIENT_SETUP.md"]
+    end
+    subgraph clients["Private client repos (one per client)"]
+        c1["acme-price-tracker<br/>config.yaml · data branch · logs · secrets"]
+        c2["…"]
+    end
+    tpl -- "Use this template<br/>(private)" --> c1
+    tpl --> c2
+    tags -- "uv tool install<br/>git+…@TRACKER_VERSION" --> c1
+    tags --> c2
+```
+
+| Data | Lives in |
+|---|---|
+| Tracker code, CHANGELOG, release tags | public `price-tracker` |
+| Competitors, products, own prices (`config.yaml`) | the client's private repo |
+| Price history (`tracker.db` on `data`) | the client's private repo |
+| Run logs (artifacts, 30 days) | the client's private repo |
+| SMTP, recipients, Google key | the client repo's secrets |
+
+A client repo's `daily.yml` has two jobs:
+- **guard** asks the GitHub API whether the repo is private and whether it's a template.
+  - The template repo does nothing.
+  - A public repo fails ("Public repository").
+  - A config with leftover `.example` placeholders fails.
+  - Anything unclear fails closed.
+- **run** starts only after the guard says ok:
+  1. Install the tracker at `TRACKER_VERSION`.
+  2. `tracker data restore`.
+  3. `tracker ci-config`.
+  4. `tracker check-config`.
+  5. `tracker run`.
+  6. `tracker data save`, only after a successful restore.
+  7. Upload the logs.
+
+`check.yml` validates `config.yaml` against the pinned version on every push, so bumping
+`TRACKER_VERSION` is a one-line, checked change.
+
 ## Mock competitor shop
 
 `mock_site/` is a stdlib HTTP server for demos and end-to-end checks. Its state is a JSON file
@@ -523,3 +576,6 @@ flowchart LR
 | Public repo | Portfolio link; a private repo would also be free at ~2 Actions minutes a day. Use private for real clients, because the `data` branch is readable |
 | Start empty only on "branch missing" | A network error must fail the run, not erase the history |
 | Delivery details are counts, not addresses | Logs and artifacts can be public; recipients are private |
+| Client data only in private repos from a template | The public repo's `data` branch and artifacts are readable by anyone |
+| Repo-specific steps as `tracker` commands (`data`, `ci-config`) | Client repos install the package by tag rather than copying scripts |
+| Privacy guard asks the API, fails closed | Event payloads differ between scheduled and manual runs; "unknown" must not run |
