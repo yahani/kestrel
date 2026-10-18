@@ -1,0 +1,105 @@
+name: Daily run
+
+# F10: check every product once a day, send one digest, keep history on the `data` branch.
+on:
+  schedule:
+    - cron: "17 6 * * *" # 06:17 UTC daily (off the hour, when GitHub is less busy)
+  workflow_dispatch: # "Run workflow" button for a manual run
+
+permissions:
+  contents: write # push tracker.db to the data branch
+
+concurrency:
+  group: daily-run # two runs must never write the history at the same time
+  cancel-in-progress: false
+
+env:
+  CONFIG: demo/books-sandbox.yaml
+  DATA_BRANCH: data
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: uv sync --locked
+
+      - name: Restore history from the data branch
+        run: |
+          if git fetch --depth=1 origin "$DATA_BRANCH" 2>/dev/null; then
+            git show FETCH_HEAD:tracker.db > demo/tracker.db
+            echo "restored $(stat -c %s demo/tracker.db) bytes of history"
+          else
+            echo "no $DATA_BRANCH branch yet: this first run starts with empty history"
+          fi
+
+      - name: Build this run's config from secrets
+        env:
+          DIGEST_EMAIL_TO: ${{ secrets.DIGEST_EMAIL_TO }}
+          SHEETS_SPREADSHEET_ID: ${{ secrets.SHEETS_SPREADSHEET_ID }}
+          GOOGLE_SERVICE_ACCOUNT_KEY: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_KEY }}
+        run: |
+          uv run python scripts/ci_config.py "$CONFIG" demo/ci-config.yaml
+          if [ -n "$GOOGLE_SERVICE_ACCOUNT_KEY" ]; then
+            key="$RUNNER_TEMP/service-account.json"
+            printf '%s' "$GOOGLE_SERVICE_ACCOUNT_KEY" > "$key"
+            chmod 600 "$key"
+            echo "GOOGLE_SERVICE_ACCOUNT_JSON=$key" >> "$GITHUB_ENV"
+          fi
+
+      - name: Check config and secrets
+        run: uv run tracker check-config -c demo/ci-config.yaml
+        env:
+          SMTP_HOST: ${{ secrets.SMTP_HOST }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+          SMTP_FROM: ${{ secrets.SMTP_FROM }}
+
+      - name: Run tracker
+        run: uv run tracker run -c demo/ci-config.yaml
+        env:
+          SMTP_HOST: ${{ secrets.SMTP_HOST }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+          SMTP_FROM: ${{ secrets.SMTP_FROM }}
+
+      # Runs even when the tracker exits 1 (e.g. email failed): the observations and the
+      # record of what still needs sending must be kept, or the next run would lose them.
+      - name: Save history to the data branch
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ ! -f demo/tracker.db ]; then echo "no history to save"; exit 0; fi
+          dir="$RUNNER_TEMP/data-branch"
+          mkdir -p "$dir"
+          cp demo/tracker.db "$dir/tracker.db"
+          printf '%s\n' "# History" "" \
+            "SQLite history written by the Daily run workflow. Replaced on every run;" \
+            "the database itself keeps every observation." > "$dir/README.md"
+          cd "$dir"
+          git init -q -b "$DATA_BRANCH"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add tracker.db README.md
+          git commit -q -m "History after run ${GITHUB_RUN_ID} ($(date -u +%Y-%m-%dT%H:%MZ))"
+          git push -q -f "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "HEAD:refs/heads/$DATA_BRANCH"
+          echo "saved $(stat -c %s tracker.db) bytes to $DATA_BRANCH"
+
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: logs-${{ github.run_id }}
+          path: demo/logs/
+          retention-days: 30
+          if-no-files-found: ignore

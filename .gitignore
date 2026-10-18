@@ -34,3 +34,6 @@ mock_site/demo-email.yaml
 
 # Written by the reviewer, not part of the build
 REVIEW.md
+
+# Built by the daily workflow from secrets
+demo/ci-config.yaml

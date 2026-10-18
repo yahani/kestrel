@@ -18,7 +18,7 @@ _Last updated: 2026-10-18, session 5 in progress._
 | F7 | Compare with own price | ✅ done | `changes.py` | Price changes carry an `undercut` flag when the new price is below `my_price`. A separate `undercut` change fires only when a move under the threshold crosses below `my_price`, so one event is never reported twice. Only flagged when the competitor's currency matches the site currency (`my_price` is assumed to be in it). |
 | F8 | Alert | ✅ done (real send through Gmail accepted) | `alerts.py` | One digest per run as text + HTML email (sections: Undercutting you, Price changes, Stock, Other, Couldn't check, Site health) and a Slack Block Kit payload. Competitor text is escaped. Not sent when nothing changed unless `always_send_summary` (a newly failing site also triggers a send). SMTP via STARTTLS/SSL (trusting the system store **plus certifi**, since python.org's macOS Python ships with no root certificates) with secrets from env/`.env`; Slack sender built, off in config. `run` sends it; exits 1 if a channel fails. **A digest that fails to send is carried into the next one that gets through, exactly once, per channel**, under "From earlier runs that couldn't be sent" with the original run's time (append-only `runs` + `deliveries` tables). |
 | F9 | Export to Sheets | ✅ done (real export to Google Sheets verified 2026-10-18) | `sheets.py` | Service account from `GOOGLE_SERVICE_ACCOUNT_JSON`. Appends each run's observations to "Observations" and rewrites "Latest" (one row per active product, with an `undercuts_me` column). Creates missing tabs with a frozen header. RAW writes, so a competitor title can't run as a formula. Accepts the sheet ID or its URL. Price columns are formatted `0.00`. Tested against a fake whose method signatures are checked against gspread 6.2.1, and against a real sheet: run `20261018T100321Z-318c90` wrote 4 rows, and Latest matched the database with 0 mismatches. |
-| F10 | Schedule | ⏳ session 5 | — | CI workflow (lint + tests) exists; the daily cron workflow doesn't yet. |
+| F10 | Schedule | 🟡 built, first run pending | `.github/workflows/daily.yml`, `scripts/ci_config.py` | Daily cron at 06:17 UTC plus a manual **Run workflow** button. One run at a time. Restores `tracker.db` from the `data` branch and saves it back even when the run fails (force-pushed as a single commit, so the repo doesn't grow). Email and Sheets come from repository secrets; the recipient is never committed. Logs are uploaded as an artifact kept 30 days. |
 | F11 | CLI | ✅ done | `cli.py`, `pipeline.py` | `run [--dry-run]`, `check-config` (also warns about missing secrets for enabled channels), `test-selectors <url> [--html] [--save]`, `history <url\|sku\|url part> [--limit]`. `--dry-run` previews the digest, saves nothing and sends nothing. Secrets are read from `.env` next to the config or in the current folder; real env vars win. |
 | F12 | Health report | ✅ done | `report.py` | Summary (checked, ok, failed, changes, seconds). A site is failing in a run when **all** its products fail; at 2 runs in a row → an alert whose advice depends on why it failed (parse errors → "selectors may have changed"; fetch, robots or blocking → "unreachable, blocking us or disallowing us in robots.txt"; mixed → check both), sent **once** (when the streak hits 2), then still listed while it lasts. |
 
@@ -34,7 +34,7 @@ _Last updated: 2026-10-18, session 5 in progress._
 
 ## 2. Test results
 
-Run on 2026-10-18 with `uv run pytest --cov=tracker` (session 5, after JSON-lines logs):
+Run on 2026-10-18 with `uv run pytest --cov=tracker` (session 5, after the daily workflow):
 
 | Suite | Tests | Result |
 |---|---|---|
@@ -51,7 +51,8 @@ Run on 2026-10-18 with `uv run pytest --cov=tracker` (session 5, after JSON-line
 | `test_sheets.py` | 23 | ✅ pass |
 | `test_carryover.py` | 9 | ✅ pass |
 | `test_logs.py` | 7 | ✅ pass |
-| **Total** | **392** | **✅ all pass** |
+| `test_ci_config.py` | 4 | ✅ pass |
+| **Total** | **396** | **✅ all pass** |
 
 Coverage: 100% on every module in `src/tracker/` (spec target is 80%). Excluded: the
 Playwright loader and `sheets.open_spreadsheet`, which need a real browser or real Google
