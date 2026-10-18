@@ -44,4 +44,6 @@ alerts:
 
 sheets:
   enabled: false
-  spreadsheet_id: ""
+  spreadsheet_id: ""                # the sheet's ID or full URL; share it with the service account
+  observations_tab: Observations    # every check is appended here
+  latest_tab: Latest                # rewritten each run: one row per product

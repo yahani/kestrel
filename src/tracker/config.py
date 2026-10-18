@@ -120,12 +120,16 @@ class Alerts(_Strict):
 
 class Sheets(_Strict):
     enabled: bool = False
-    spreadsheet_id: str = ""
+    spreadsheet_id: str = Field(default="", description="The sheet's ID or its full URL")
+    observations_tab: str = Field(default="Observations", min_length=1)
+    latest_tab: str = Field(default="Latest", min_length=1)
 
     @model_validator(mode="after")
     def _id_when_enabled(self) -> Sheets:
         if self.enabled and not self.spreadsheet_id:
             raise ValueError("'spreadsheet_id' is required when sheets is enabled")
+        if self.observations_tab == self.latest_tab:
+            raise ValueError("'observations_tab' and 'latest_tab' must be different tabs")
         return self
 
 

@@ -44,7 +44,7 @@ class Digest:
 
 @dataclass(frozen=True)
 class Delivery:
-    channel: Literal["email", "slack"]
+    channel: Literal["email", "slack", "sheets"]
     ok: bool
     detail: str
 

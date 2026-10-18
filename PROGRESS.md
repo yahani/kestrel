@@ -17,7 +17,7 @@ _Last updated: 2026-10-18, session 4 in progress._
 | F6 | Detect changes | ✅ done | `changes.py` | Compared with the last *successful* observation: price up/down with signed % (threshold inclusive, default 1%), out of stock, back in stock, title change, currency change, new failure (repeat failures left to F12). First observation → no changes. Stock is compared with the last observation whose stock was known, so `in → unknown → out` still reports out of stock. |
 | F7 | Compare with own price | ✅ done | `changes.py` | Price changes carry an `undercut` flag when the new price is below `my_price`. A separate `undercut` change fires only when a move under the threshold crosses below `my_price`, so one event is never reported twice. Only flagged when the competitor's currency matches the site currency (`my_price` is assumed to be in it). |
 | F8 | Alert | 🟡 built, not yet in `run` | `alerts.py` | One digest per run as text + HTML email (sections: Undercutting you, Price changes, Stock, Other, Couldn't check, Site health) and a Slack Block Kit payload. Competitor text is escaped. Not sent when nothing changed unless `always_send_summary` (a newly failing site also triggers a send). SMTP via STARTTLS/SSL with secrets from env/`.env`; Slack sender built, off in config. **Not yet sent for real** (no SMTP account yet). |
-| F9 | Export to Sheets | ⏳ session 4 | — | |
+| F9 | Export to Sheets | 🟡 built, not yet in `run`; **untested against real Google** | `sheets.py` | Service account from `GOOGLE_SERVICE_ACCOUNT_JSON`. Appends each run's observations to "Observations" and rewrites "Latest" (one row per active product, with an `undercuts_me` column). Creates missing tabs with a frozen header. RAW writes, so a competitor title can't run as a formula. Accepts the sheet ID or its URL. Tested against a fake whose method signatures are checked against gspread 6.2.1. |
 | F10 | Schedule | ⏳ session 5 | — | CI workflow (lint + tests) exists; the daily cron workflow doesn't yet. |
 | F11 | CLI | 🟡 partial | `cli.py`, `pipeline.py` | `check-config`, `test-selectors` (`--html`, `--save`) and `history <url\|sku\|url part> [--limit]` done. `run [--dry-run]` fetches, stores and **prints** changes; alerts, Sheets and the health report hook in during session 4. `--dry-run` works on an in-memory copy, so nothing is written. |
 | F12 | Health report | 🟡 built, not yet in `run` | `report.py` | Summary (checked, ok, failed, changes, seconds). A site is failing in a run when **all** its products fail; at 2 runs in a row → "selectors may have changed" alert, sent **once** (when the streak hits 2), then still listed while it lasts. |
@@ -33,7 +33,7 @@ _Last updated: 2026-10-18, session 4 in progress._
 
 ## 2. Test results
 
-Run on 2026-10-18 with `uv run pytest --cov=tracker` (after F8):
+Run on 2026-10-18 with `uv run pytest --cov=tracker` (after F9):
 
 | Suite | Tests | Result |
 |---|---|---|
@@ -47,7 +47,8 @@ Run on 2026-10-18 with `uv run pytest --cov=tracker` (after F8):
 | `test_pipeline.py` | 14 | ✅ pass |
 | `test_report.py` | 8 | ✅ pass |
 | `test_alerts.py` | 35 | ✅ pass |
-| **Total** | **314** | **✅ all pass** |
+| `test_sheets.py` | 19 | ✅ pass |
+| **Total** | **333** | **✅ all pass** |
 
 Coverage: 100% on `config.py`, `fetch.py`, `parse.py` and `cli.py` (spec target is 80%; the
 Playwright loader is excluded because it needs a real browser). `ruff check` and
@@ -74,7 +75,7 @@ tested against a fake client but not against real Google.** In this order:
 - ✅ Money shown as `$24.00` / `£51.77` / `LKR 4500.00` in change text and `history`.
 - ✅ **F12** run summary + site health (hooked into `run` in the last step).
 - ✅ **F8** digest + email/Slack senders (hooked into `run` in the last step).
-- **F9** Sheets export: append observations, refresh "Latest".
+- ✅ **F9** Sheets export (hooked into `run` in the last step).
 - Hook all three into `tracker run`; `--dry-run` previews the digest without sending.
 
 **By hand, session 3** (done 2026-10-18 against the real mock server on localhost): run 1
