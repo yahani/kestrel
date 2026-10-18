@@ -31,14 +31,17 @@ jobs:
       - name: Install dependencies
         run: uv sync --locked
 
+      # Only a missing branch starts empty history. If GitHub can't be reached or the branch
+      # has no readable database, this fails and sets no outputs, so nothing is saved below
+      # and the real history can't be overwritten (scripts/data_branch.py).
       - name: Restore history from the data branch
-        run: |
-          if git fetch --depth=1 origin "$DATA_BRANCH" 2>/dev/null; then
-            git show FETCH_HEAD:tracker.db > demo/tracker.db
-            echo "restored $(stat -c %s demo/tracker.db) bytes of history"
-          else
-            echo "no $DATA_BRANCH branch yet: this first run starts with empty history"
-          fi
+        id: restore
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          uv run python scripts/data_branch.py restore
+          --remote "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          --branch "$DATA_BRANCH" --db demo/tracker.db
 
       - name: Build this run's config from secrets
         env:
@@ -74,26 +77,17 @@ jobs:
 
       # Runs even when the tracker exits 1 (e.g. email failed): the observations and the
       # record of what still needs sending must be kept, or the next run would lose them.
+      # Skipped when the restore didn't succeed, and refuses to save fewer observations
+      # than were restored.
       - name: Save history to the data branch
-        if: always()
+        if: always() && steps.restore.outputs.restored != ''
         env:
           GH_TOKEN: ${{ github.token }}
-        run: |
-          if [ ! -f demo/tracker.db ]; then echo "no history to save"; exit 0; fi
-          dir="$RUNNER_TEMP/data-branch"
-          mkdir -p "$dir"
-          cp demo/tracker.db "$dir/tracker.db"
-          printf '%s\n' "# History" "" \
-            "SQLite history written by the Daily run workflow. Replaced on every run;" \
-            "the database itself keeps every observation." > "$dir/README.md"
-          cd "$dir"
-          git init -q -b "$DATA_BRANCH"
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add tracker.db README.md
-          git commit -q -m "History after run ${GITHUB_RUN_ID} ($(date -u +%Y-%m-%dT%H:%MZ))"
-          git push -q -f "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "HEAD:refs/heads/$DATA_BRANCH"
-          echo "saved $(stat -c %s tracker.db) bytes to $DATA_BRANCH"
+        run: >-
+          uv run python scripts/data_branch.py save
+          --remote "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          --branch "$DATA_BRANCH" --db demo/tracker.db
+          --min-observations "${{ steps.restore.outputs.observations }}"
 
       - name: Upload logs
         if: always()
