@@ -32,7 +32,7 @@ _Last updated: 2026-10-18, session 3 in progress._
 
 ## 2. Test results
 
-Run on 2026-10-18 with `uv run pytest --cov=tracker` (after F6, F7):
+Run on 2026-10-18 with `uv run pytest --cov=tracker` (after the mock site):
 
 | Suite | Tests | Result |
 |---|---|---|
@@ -42,7 +42,8 @@ Run on 2026-10-18 with `uv run pytest --cov=tracker` (after F6, F7):
 | `test_cli.py` | 16 | ✅ pass |
 | `test_store.py` | 15 | ✅ pass |
 | `test_changes.py` | 28 | ✅ pass |
-| **Total** | **210** | **✅ all pass** |
+| `test_mock_site.py` | 18 | ✅ pass |
+| **Total** | **228** | **✅ all pass** |
 
 Coverage: 100% on `config.py`, `fetch.py`, `parse.py` and `cli.py` (spec target is 80%; the
 Playwright loader is excluded because it needs a real browser). `ruff check` and
@@ -54,7 +55,7 @@ Tests make no network calls: real HTTP is blocked in `tests/conftest.py`.
 
 - [x] Price normalisation handles at least 10 formats
 - [x] Stock normalisation handles in stock, out of stock, quantity text and unknown
-- [x] Parsing works on saved fixtures from each demo site (books.toscrape.com, web-scraping.dev; mock site in session 3)
+- [x] Parsing works on saved fixtures from each demo site (books.toscrape.com, web-scraping.dev, mock shop)
 - [x] Change detection: up, down, below-threshold ignored, back in stock, out of stock, undercut, first observation (no alert)
 - [x] Invalid config produces a readable error naming the field
 - [x] A failed fetch is recorded and does not stop other products (fetch level; the run loop arrives in session 4)
@@ -71,7 +72,7 @@ Session 3 (approved), in this order:
 - ✅ **F6** change detection.
 - ✅ **F7** undercut flag.
 - **F11** `tracker history <product>`.
-- Mock competitor site whose prices and stock change on demand, plus its fixtures.
+- ✅ Mock competitor shop (`mock_site/`): `python -m mock_site serve | list | set | reset`, plus an `/admin` page; its fixture is saved.
 
 ## 4. Blocked or waiting on you
 

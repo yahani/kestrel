@@ -25,3 +25,6 @@ build/
 .idea/
 .vscode/
 .DS_Store
+
+# Mock shop state
+mock_site/state.json

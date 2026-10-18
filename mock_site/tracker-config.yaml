@@ -1,0 +1,49 @@
+# Tracker config for the local mock competitor shop (demo and end-to-end checks).
+#   terminal 1:  uv run python -m mock_site serve
+#   terminal 2:  uv run tracker run -c mock_site/tracker-config.yaml
+
+database: mock-demo.db
+
+fetch:
+  contact: yahanihwgm@gmail.com
+  timeout_seconds: 10
+
+sites:
+  - name: rival-x
+    base_url: http://127.0.0.1:8000
+    fetch_mode: http
+    delay_seconds: 5
+    selectors:
+      title: "main.product h1.product-name"
+      price: "main.product span.price"
+      stock: "main.product p.stock"
+    currency: USD
+
+products:
+  - site: rival-x
+    url: http://127.0.0.1:8000/product/blue-mug
+    my_sku: MUG-BLUE
+    my_price: 23.00
+  - site: rival-x
+    url: http://127.0.0.1:8000/product/red-mug
+    my_sku: MUG-RED
+    my_price: 21.50
+  - site: rival-x
+    url: http://127.0.0.1:8000/product/green-teapot
+    my_sku: TEAPOT-GREEN
+    my_price: 44.00
+  - site: rival-x
+    url: http://127.0.0.1:8000/product/coaster-set
+    my_sku: COASTER-4
+    my_price: 11.00
+
+alerts:
+  min_change_percent: 1
+  always_send_summary: false
+  email:
+    enabled: false
+  slack:
+    enabled: false
+
+sheets:
+  enabled: false

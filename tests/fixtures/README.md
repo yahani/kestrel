@@ -8,6 +8,7 @@ Saved product pages so tests never hit live sites.
 | `books_sharp_objects.html` | https://books.toscrape.com/catalogue/sharp-objects_997/index.html |
 | `scrapingdev_product_1.html` | https://web-scraping.dev/product/1 |
 | `scrapingdev_product_2.html` | https://web-scraping.dev/product/2 |
+| `mock_blue_mug.html` | Local mock shop (`python -m mock_site serve`), seed state, `/product/blue-mug` |
 | `books_out_of_stock.html` | Synthetic: `books_in_stock.html` with stock set to "Out of stock" |
 | `books_layout_changed.html` | Synthetic: `books_in_stock.html` with the price class renamed |
 
