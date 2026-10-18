@@ -73,7 +73,7 @@ Tests make no network calls: real HTTP is blocked in `tests/conftest.py`.
 - [ ] `tracker run` on the books sandbox stores correct title, price and stock for 20 products. Not run yet (the example config has 1 product); planned for session 5.
 - [x] Changing two prices and one stock level on the mock site produces one digest with exactly those three changes. Checked 2026-10-18 with the real mock server and a local SMTP server: exactly 1 email, 3 changes.
 - [x] Running twice with no changes sends no alert (same check: runs 1 and 3 sent nothing).
-- [ ] Email digest arrives and reads clearly on a phone. **Sent through Gmail and accepted (2026-10-18)**; waiting for you to confirm it arrived and reads well on your phone.
+- [x] Email digest arrives and reads clearly on a phone. Sent through Gmail on 2026-10-18; you confirmed it arrived and reads fine on your phone.
 - [ ] Google Sheet "Latest" tab matches the database. Matches in tests against a fake sheet; needs real Google (**waiting on service account setup**).
 - [ ] GitHub Actions run succeeds on schedule and on manual trigger (session 5).
 - [ ] A fresh clone plus the README gets a stranger running in under 15 minutes (session 5).
@@ -108,13 +108,14 @@ Session 4 is done. Session 5 needs a plan and your approval:
 - **Waiting:** approval of the session 5 plan (not written yet).
 - **Waiting:** your review of session 4 (see the list in the session report).
 - **Walkthroughs you asked for:**
-  1. SMTP setup for the email digest: **in progress**. `.env` has all five `SMTP_*` values,
+  1. ✅ SMTP setup for the email digest: **done**. `.env` has all five `SMTP_*` values,
      and `check-config` finds them. The gitignored `mock_site/demo-email.yaml` sends to your
      Gmail. The first real send failed with `CERTIFICATE_VERIFY_FAILED` (this Python had no
      root certificates); fixed in code. **Real send succeeded 2026-10-18 09:48 UTC** through
      Gmail to yahanihwgm@gmail.com (run `20261018T094757Z-b46489`, 3 changes); the next
-     run with no changes sent nothing. Next: you check how it reads on your phone.
-  2. Google service account setup for Sheets. This unblocks "Sheet matches the database".
+     run with no changes sent nothing. You confirmed it reads fine on your phone.
+  2. Google service account setup for Sheets: **next**. This unblocks "Sheet matches the
+     database".
 - **Decided 2026-10-18:** email only for the demo digest (Slack built, off); Sheets built,
   not yet tested against real Google.
 - **`REVIEW.md`:** an untracked file in the repo root that wasn't written in these sessions.
