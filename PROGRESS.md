@@ -185,8 +185,34 @@ Approved 2026-10-18. Decisions:
   - The config validates with the installed v1.0.0.
   - Not checked: actionlint (it wouldn't build; same missing-certificates problem), so the
     real run in the test client repo is the check.
-- [ ] Push this repo and the tag (your OK) → create the private template repo (your OK) →
-  test client repo and one run by hand.
+- [x] **GitHub, approved 2026-10-18:**
+  - **This repo:** `main` pushed and CI passed. A demo Daily run with the new commands
+    passed (39130187871): it restored 60 observations and saved 80.
+  - **Release:** tag `v1.0.0` and a GitHub Release with the changelog notes. `uv tool install
+    git+https://github.com/yahani/price-tracker@v1.0.0` gives `price-tracker 1.0.0` with all
+    6 commands.
+  - **Template:** `yahani/price-tracker-client-template` is **private** and marked as a
+    template, with a Dependabot check for GitHub Actions added. Its Check config passed
+    against v1.0.0 (39130421690). Its Daily run (39130448825): guard ✅, run job skipped,
+    notice "Template repository — Nothing to track here".
+- [x] **End-to-end test** in the private repo `yahani/test-client-tracker`, created from the
+  template: 3 books on books.toscrape.com, the 5 SMTP secrets, no `DIGEST_EMAIL_TO`, so
+  email stays off.
+  - **Check config** (39130531079): ✅ v1.0.0, 3 products.
+  - **Daily run 1** (39130578518): ✅ guard "private, no placeholders", v1.0.0 installed,
+    "no data branch yet", 3/3 ok, **`data` created** with 3 observations.
+  - **Daily run 2** (39130657407): ✅ **restored 3 observations**, 3/3 ok, **saved 6**.
+    `data` is still 1 commit, and the log artifact has 0 email addresses.
+  - **Public test** (39130747894): made public → **guard failed** with "Public repository
+    — This repository is public. Client data … must only run in a private repo", the run
+    job was skipped, and `data` was untouched (6 observations). Made **private** again
+    straight after.
+- **Follow-ups:**
+  - GitHub warns that `actions/checkout@v4` runs on Node 20, which is deprecated. Dependabot
+    in both repos should propose v5.
+  - The test repo's daily schedule now runs every day. To stop it:
+    `gh workflow disable daily.yml -R yahani/test-client-tracker`. To remove the repo,
+    delete it yourself; `gh` lacks the `delete_repo` scope.
 - [x] ARCHITECTURE.md: a "public package → private client repos" diagram and data table.
   The README warning points to the template and its `CLIENT_SETUP.md`, and lists the new
   commands and `CHANGELOG.md`.
