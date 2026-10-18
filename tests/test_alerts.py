@@ -360,17 +360,17 @@ def test_send_slack_without_client_makes_a_real_request():
 
 def test_deliver_email_only():
     smtp = FakeSMTP()
-    results = deliver(
-        build_digest(report_with(), TODAY), with_alerts(email=True), ENV, connect=smtp
-    )
+    digest = build_digest(report_with(), TODAY)
+    results = deliver({"email": digest}, with_alerts(email=True), ENV, connect=smtp)
     assert [r.channel for r in results] == ["email"]
     assert results[0].ok
 
 
 def test_deliver_both_channels():
     env = {**ENV, "SLACK_WEBHOOK_URL": WEBHOOK}
+    digest = build_digest(report_with(), TODAY)
     results = deliver(
-        build_digest(report_with(), TODAY),
+        {"email": digest, "slack": digest},
         with_alerts(email=True, slack=True),
         env,
         connect=FakeSMTP(),
@@ -380,13 +380,14 @@ def test_deliver_both_channels():
 
 
 def test_deliver_reports_missing_secrets_without_raising():
-    results = deliver(build_digest(report_with(), TODAY), with_alerts(email=True, slack=True), {})
+    digest = build_digest(report_with(), TODAY)
+    results = deliver({"email": digest, "slack": digest}, with_alerts(email=True, slack=True), {})
     assert [(r.channel, r.ok) for r in results] == [("email", False), ("slack", False)]
     assert "SMTP_HOST" in results[0].detail
 
 
 def test_deliver_nothing_enabled():
-    assert deliver(build_digest(report_with(), TODAY), with_alerts(email=False), ENV) == []
+    assert deliver({}, with_alerts(email=False), ENV) == []
 
 
 class FakeConnection:
@@ -426,3 +427,20 @@ def test_tls_trusts_certifi_even_without_system_certificates(monkeypatch, securi
     assert context.check_hostname is True
     certifi_count = len(ssl.create_default_context(cafile=certifi.where()).get_ca_certs())
     assert len(context.get_ca_certs()) >= certifi_count > 100
+
+
+def test_carried_items_are_escaped_and_labelled():
+    from tracker.store import PendingRun
+
+    evil = {"section": "Other changes", "text": "renamed '<script>x</script>'", "url": "http://s/x"}
+    carried = [PendingRun("r0", "2026-10-17T06:00:00+00:00", [evil])]
+    digest = build_digest(report_with(), TODAY, carried)
+
+    assert digest.subject.endswith(": no changes, 1 carried over")
+    assert "17 Oct 2026 06:00 UTC\n- [Other changes] renamed '<script>x</script>'" in digest.text
+    assert "<script>" not in digest.html
+    assert "renamed &#x27;&lt;script&gt;x&lt;/script&gt;&#x27;" in digest.html
+    assert "Nothing changed since the last check." not in digest.text
+    slack_text = digest.slack["blocks"][1]["text"]["text"]
+    assert "<script>" not in slack_text
+    assert "(17 Oct 2026 06:00 UTC)" in slack_text

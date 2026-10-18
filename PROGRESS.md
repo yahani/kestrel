@@ -16,7 +16,7 @@ _Last updated: 2026-10-18, end of session 4._
 | F5 | Store | ✅ done | `store.py` | `products` + append-only `observations` (UPDATE/DELETE blocked by triggers), prices stored as TEXT Decimals, status values checked by the DB. Products removed from config are marked inactive, history kept. `database:` path added to config. In-memory scratch copy for `--dry-run`. Decimals stored in plain notation (`100`, never `1E+2`). |
 | F6 | Detect changes | ✅ done | `changes.py` | Compared with the last *successful* observation: price up/down with signed % (threshold inclusive, default 1%), out of stock, back in stock, title change, currency change, new failure (repeat failures left to F12). First observation → no changes. Stock is compared with the last observation whose stock was known, so `in → unknown → out` still reports out of stock. |
 | F7 | Compare with own price | ✅ done | `changes.py` | Price changes carry an `undercut` flag when the new price is below `my_price`. A separate `undercut` change fires only when a move under the threshold crosses below `my_price`, so one event is never reported twice. Only flagged when the competitor's currency matches the site currency (`my_price` is assumed to be in it). |
-| F8 | Alert | ✅ done (real send through Gmail accepted) | `alerts.py` | One digest per run as text + HTML email (sections: Undercutting you, Price changes, Stock, Other, Couldn't check, Site health) and a Slack Block Kit payload. Competitor text is escaped. Not sent when nothing changed unless `always_send_summary` (a newly failing site also triggers a send). SMTP via STARTTLS/SSL (trusting the system store **plus certifi**, since python.org's macOS Python ships with no root certificates) with secrets from env/`.env`; Slack sender built, off in config. `run` sends it; exits 1 if a channel fails. |
+| F8 | Alert | ✅ done (real send through Gmail accepted) | `alerts.py` | One digest per run as text + HTML email (sections: Undercutting you, Price changes, Stock, Other, Couldn't check, Site health) and a Slack Block Kit payload. Competitor text is escaped. Not sent when nothing changed unless `always_send_summary` (a newly failing site also triggers a send). SMTP via STARTTLS/SSL (trusting the system store **plus certifi**, since python.org's macOS Python ships with no root certificates) with secrets from env/`.env`; Slack sender built, off in config. `run` sends it; exits 1 if a channel fails. **A digest that fails to send is carried into the next one that gets through, exactly once, per channel**, under "From earlier runs that couldn't be sent" with the original run's time (append-only `runs` + `deliveries` tables). |
 | F9 | Export to Sheets | ✅ done (real export to Google Sheets verified 2026-10-18) | `sheets.py` | Service account from `GOOGLE_SERVICE_ACCOUNT_JSON`. Appends each run's observations to "Observations" and rewrites "Latest" (one row per active product, with an `undercuts_me` column). Creates missing tabs with a frozen header. RAW writes, so a competitor title can't run as a formula. Accepts the sheet ID or its URL. Price columns are formatted `0.00`. Tested against a fake whose method signatures are checked against gspread 6.2.1, and against a real sheet: run `20261018T100321Z-318c90` wrote 4 rows, and Latest matched the database with 0 mismatches. |
 | F10 | Schedule | ⏳ session 5 | — | CI workflow (lint + tests) exists; the daily cron workflow doesn't yet. |
 | F11 | CLI | ✅ done | `cli.py`, `pipeline.py` | `run [--dry-run]`, `check-config` (also warns about missing secrets for enabled channels), `test-selectors <url> [--html] [--save]`, `history <url\|sku\|url part> [--limit]`. `--dry-run` previews the digest, saves nothing and sends nothing. Secrets are read from `.env` next to the config or in the current folder; real env vars win. |
@@ -33,7 +33,7 @@ _Last updated: 2026-10-18, end of session 4._
 
 ## 2. Test results
 
-Run on 2026-10-18 with `uv run pytest --cov=tracker` (after the sheet price format fix):
+Run on 2026-10-18 with `uv run pytest --cov=tracker` (after the review's must-fix):
 
 | Suite | Tests | Result |
 |---|---|---|
@@ -41,14 +41,15 @@ Run on 2026-10-18 with `uv run pytest --cov=tracker` (after the sheet price form
 | `test_fetch.py` | 32 | ✅ pass |
 | `test_parse.py` | 85 | ✅ pass |
 | `test_cli.py` | 38 | ✅ pass |
-| `test_store.py` | 21 | ✅ pass |
+| `test_store.py` | 29 | ✅ pass |
 | `test_changes.py` | 39 | ✅ pass |
 | `test_mock_site.py` | 18 | ✅ pass |
 | `test_pipeline.py` | 14 | ✅ pass |
 | `test_report.py` | 8 | ✅ pass |
-| `test_alerts.py` | 37 | ✅ pass |
+| `test_alerts.py` | 39 | ✅ pass |
 | `test_sheets.py` | 21 | ✅ pass |
-| **Total** | **349** | **✅ all pass** |
+| `test_carryover.py` | 9 | ✅ pass |
+| **Total** | **367** | **✅ all pass** |
 
 Coverage: 100% on every module in `src/tracker/` (spec target is 80%). Excluded: the
 Playwright loader and `sheets.open_spreadsheet`, which need a real browser or real Google
@@ -91,9 +92,8 @@ Session 4 is done. Session 5 needs a plan and your approval:
 - Final README pass and setup guide (the 15-minute fresh-clone check), demo script, and the
   20-product books sandbox check.
 - Final secrets scan of the whole history.
-- **Found during SMTP setup:** if sending the digest fails, that run's changes are already
-  stored, so the next run won't report them again and the alert is lost. Fix: remember
-  which runs' digests were delivered, and include undelivered changes in the next digest.
+- ✅ **Fixed (REVIEW.md must-fix 1):** a failed digest send no longer loses the alert.
+  Tests written first: 7 of the 9 new end-to-end tests fail on the previous commit.
 
 **By hand, session 4** (2026-10-18, real mock server + local SMTP server, real `smtplib`):
 - Run 1: 4 ok, no email.

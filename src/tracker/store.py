@@ -1,7 +1,9 @@
-"""SQLite storage: products from config and an append-only log of observations (F5)."""
+"""SQLite storage: products, an append-only log of observations (F5), and a record of
+which runs' digests were delivered, so a failed send is carried into the next digest."""
 
 from __future__ import annotations
 
+import json
 import sqlite3
 from dataclasses import dataclass
 from decimal import Decimal
@@ -12,7 +14,7 @@ from tracker.config import Config
 
 ObservationStatus = Literal["ok", "http_error", "parse_error", "blocked", "skipped_robots"]
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS products (
     id       INTEGER PRIMARY KEY,
@@ -46,6 +48,33 @@ CREATE TRIGGER IF NOT EXISTS observations_no_update BEFORE UPDATE ON observation
 BEGIN SELECT RAISE(ABORT, 'observations are append-only'); END;
 CREATE TRIGGER IF NOT EXISTS observations_no_delete BEFORE DELETE ON observations
 BEGIN SELECT RAISE(ABORT, 'observations are append-only'); END;
+
+-- One row per real (non-dry) run: which channels were on, and what its digest had to say.
+CREATE TABLE IF NOT EXISTS runs (
+    run_id     TEXT PRIMARY KEY,
+    started_at TEXT NOT NULL,            -- ISO 8601, UTC
+    channels   TEXT NOT NULL,            -- comma-separated, e.g. 'email,slack'; '' for none
+    items      TEXT NOT NULL             -- JSON list of {section, text, url}; [] when nothing
+);
+
+-- One row per run per channel whose items reached that channel.
+CREATE TABLE IF NOT EXISTS deliveries (
+    id           INTEGER PRIMARY KEY,
+    run_id       TEXT NOT NULL REFERENCES runs(run_id),
+    channel      TEXT NOT NULL,
+    delivered_in TEXT NOT NULL,          -- the run whose digest carried it
+    delivered_at TEXT NOT NULL,
+    UNIQUE (run_id, channel)
+);
+
+CREATE TRIGGER IF NOT EXISTS runs_no_update BEFORE UPDATE ON runs
+BEGIN SELECT RAISE(ABORT, 'runs are append-only'); END;
+CREATE TRIGGER IF NOT EXISTS runs_no_delete BEFORE DELETE ON runs
+BEGIN SELECT RAISE(ABORT, 'runs are append-only'); END;
+CREATE TRIGGER IF NOT EXISTS deliveries_no_update BEFORE UPDATE ON deliveries
+BEGIN SELECT RAISE(ABORT, 'deliveries are append-only'); END;
+CREATE TRIGGER IF NOT EXISTS deliveries_no_delete BEFORE DELETE ON deliveries
+BEGIN SELECT RAISE(ABORT, 'deliveries are append-only'); END;
 """
 
 
@@ -67,6 +96,15 @@ class SiteRun:
     ok: int
     total: int
     statuses: tuple[str, ...]  # distinct statuses seen, sorted
+
+
+@dataclass(frozen=True)
+class PendingRun:
+    """An earlier run whose digest items haven't reached a channel yet."""
+
+    run_id: str
+    started_at: str
+    items: list[dict]
 
 
 @dataclass(frozen=True)
@@ -285,6 +323,48 @@ class Store:
             """
         )
         return [(self.product(row["product_id"]), self._observation(row)) for row in rows]
+
+    # --- runs and deliveries ------------------------------------------------------------
+
+    def record_run(
+        self, run_id: str, started_at: str, channels: list[str], items: list[dict]
+    ) -> None:
+        with self.conn:
+            self.conn.execute(
+                "INSERT INTO runs (run_id, started_at, channels, items) VALUES (?, ?, ?, ?)",
+                (run_id, started_at, ",".join(channels), json.dumps(items)),
+            )
+
+    def record_delivery(
+        self, run_id: str, channel: str, delivered_in: str, delivered_at: str
+    ) -> None:
+        with self.conn:
+            self.conn.execute(
+                """
+                INSERT OR IGNORE INTO deliveries (run_id, channel, delivered_in, delivered_at)
+                VALUES (?, ?, ?, ?)
+                """,
+                (run_id, channel, delivered_in, delivered_at),
+            )
+
+    def pending_runs(self, channel: str, exclude_run: str) -> list[PendingRun]:
+        """Earlier runs with digest items that were due on `channel` but never reached it.
+
+        Oldest first. Runs from before the channel was enabled are never pending.
+        """
+        rows = self.conn.execute(
+            """
+            SELECT r.* FROM runs r
+            WHERE r.items != '[]'
+              AND r.run_id != :exclude
+              AND instr(',' || r.channels || ',', ',' || :channel || ',') > 0
+              AND NOT EXISTS (SELECT 1 FROM deliveries d
+                              WHERE d.run_id = r.run_id AND d.channel = :channel)
+            ORDER BY r.started_at, r.rowid
+            """,
+            {"channel": channel, "exclude": exclude_run},
+        )
+        return [PendingRun(r["run_id"], r["started_at"], json.loads(r["items"])) for r in rows]
 
     @staticmethod
     def _observation(row: sqlite3.Row) -> Observation:

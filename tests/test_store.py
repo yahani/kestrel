@@ -157,7 +157,7 @@ def test_open_creates_file_and_persists(tmp_path):
         s.record(product.id, obs())
     with Store.open(path) as s:
         assert len(s.history(product.id)) == 1
-        assert s.conn.execute("PRAGMA user_version").fetchone()[0] == 1
+        assert s.conn.execute("PRAGMA user_version").fetchone()[0] == 2
 
 
 def test_scratch_copy_never_touches_disk(tmp_path):
@@ -229,3 +229,73 @@ def test_latest_observations_for_active_products(store):
 
     store.sync_products(config_with({"site": "books-sandbox", "url": URL_A}))
     assert [p.url for p, _ in store.latest_observations()] == [URL_A]
+
+
+# --- runs and deliveries (undelivered digests are carried over) ------------------------
+
+ITEM_A = {"section": "Price changes", "text": "rival-x cut A", "url": URL_A}
+ITEM_B = {"section": "Stock", "text": "rival-x is out of stock on B", "url": URL_B}
+
+
+def test_run_with_items_is_pending_until_delivered(store):
+    store.record_run("r1", "2026-10-18T06:00:00+00:00", ["email"], [ITEM_A])
+    [pending] = store.pending_runs("email", exclude_run="r2")
+    assert (pending.run_id, pending.started_at, pending.items) == (
+        "r1", "2026-10-18T06:00:00+00:00", [ITEM_A],
+    )  # fmt: skip
+
+    store.record_delivery(
+        "r1", "email", delivered_in="r2", delivered_at="2026-10-19T06:00:00+00:00"
+    )
+    assert store.pending_runs("email", exclude_run="r3") == []
+
+
+def test_pending_is_per_channel(store):
+    store.record_run("r1", "2026-10-18T06:00:00+00:00", ["email", "slack"], [ITEM_A])
+    store.record_delivery("r1", "email", delivered_in="r1", delivered_at="t")
+    assert store.pending_runs("email", exclude_run="r2") == []
+    assert [p.run_id for p in store.pending_runs("slack", exclude_run="r2")] == ["r1"]
+
+
+def test_runs_without_items_or_without_the_channel_are_never_pending(store):
+    store.record_run("r1", "2026-10-18T06:00:00+00:00", ["email"], [])
+    store.record_run("r2", "2026-10-18T07:00:00+00:00", [], [ITEM_A])  # no channel enabled
+    store.record_run("r3", "2026-10-18T08:00:00+00:00", ["slack"], [ITEM_A])
+    assert store.pending_runs("email", exclude_run="r9") == []
+
+
+def test_current_run_is_excluded_and_pending_is_oldest_first(store):
+    store.record_run("r1", "2026-10-18T06:00:00+00:00", ["email"], [ITEM_A])
+    store.record_run("r2", "2026-10-19T06:00:00+00:00", ["email"], [ITEM_B])
+    store.record_run("r3", "2026-10-20T06:00:00+00:00", ["email"], [ITEM_A])
+    assert [p.run_id for p in store.pending_runs("email", exclude_run="r3")] == ["r1", "r2"]
+
+
+def test_delivering_twice_is_harmless(store):
+    store.record_run("r1", "t", ["email"], [ITEM_A])
+    store.record_delivery("r1", "email", delivered_in="r2", delivered_at="t2")
+    store.record_delivery("r1", "email", delivered_in="r2", delivered_at="t2")
+    assert store.pending_runs("email", exclude_run="r3") == []
+
+
+@pytest.mark.parametrize("table", ["runs", "deliveries"])
+def test_runs_and_deliveries_are_append_only(store, table):
+    store.record_run("r1", "t", ["email"], [ITEM_A])
+    store.record_delivery("r1", "email", delivered_in="r1", delivered_at="t")
+    with pytest.raises(sqlite3.IntegrityError, match="append-only"):
+        store.conn.execute(f"DELETE FROM {table}")
+    with pytest.raises(sqlite3.IntegrityError, match="append-only"):
+        store.conn.execute(f"UPDATE {table} SET run_id = 'x'")
+
+
+def test_schema_upgrade_from_version_1(tmp_path):
+    path = tmp_path / "old.db"
+    old = sqlite3.connect(path)
+    old.executescript(
+        "CREATE TABLE products (id INTEGER PRIMARY KEY, site TEXT, url TEXT UNIQUE,"
+        " my_sku TEXT, my_price TEXT, active INTEGER DEFAULT 1); PRAGMA user_version = 1;"
+    )
+    old.close()
+    with Store.open(path) as s:
+        s.record_run("r1", "t", ["email"], [ITEM_A])
+        assert s.conn.execute("PRAGMA user_version").fetchone()[0] == 2

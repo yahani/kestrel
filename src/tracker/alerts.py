@@ -9,9 +9,9 @@ from __future__ import annotations
 import html
 import smtplib
 import ssl
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
-from datetime import date
+from datetime import UTC, date, datetime
 from email.message import EmailMessage
 from typing import Literal
 
@@ -21,6 +21,7 @@ import httpx
 from tracker.changes import Change
 from tracker.config import Config
 from tracker.report import RunReport
+from tracker.store import PendingRun, Store
 
 SMTP_TIMEOUT_SECONDS = 30
 SLACK_TIMEOUT_SECONDS = 15
@@ -50,9 +51,40 @@ class Delivery:
     detail: str
 
 
-def should_send(report: RunReport, always_send_summary: bool) -> bool:
-    """F8: no alert when nothing changed, unless always_send_summary is on."""
-    return bool(report.changes or report.new_site_alerts or always_send_summary)
+CARRIED_TITLE = "From earlier runs that couldn't be sent"
+Channel = Literal["email", "slack"]
+
+
+def should_send(
+    report: RunReport, always_send_summary: bool, carried: Sequence[PendingRun] = ()
+) -> bool:
+    """F8: no alert when nothing changed, unless always_send_summary is on.
+
+    Items from earlier runs whose digest failed to send also count as something to send.
+    """
+    return bool(report.changes or report.new_site_alerts or carried or always_send_summary)
+
+
+def digest_items(report: RunReport) -> list[dict]:
+    """What this run's digest has to say, in a form the store can keep and resend later."""
+    items = [
+        {"section": title, "text": change.describe(), "url": change.product.url}
+        for title, changes in _group(report.changes)
+        for change in changes
+    ]
+    items += [
+        {"section": "Site health", "text": site.describe(), "url": None}
+        for site in report.new_site_alerts
+    ]
+    return items
+
+
+def _run_label(started_at: str) -> str:
+    return f"{datetime.fromisoformat(started_at):%d %b %Y %H:%M} UTC"
+
+
+def _carried_count(carried: Sequence[PendingRun]) -> int:
+    return sum(len(run.items) for run in carried)
 
 
 Groups = list[tuple[str, list[Change]]]
@@ -63,7 +95,7 @@ def _group(changes: tuple[Change, ...]) -> Groups:
     return [(title, items) for title, items in groups if items]
 
 
-def _subject(report: RunReport, today: date) -> str:
+def _subject(report: RunReport, today: date, carried: Sequence[PendingRun]) -> str:
     parts = []
     n = len(report.changes)
     parts.append(f"{n} change{'' if n == 1 else 's'}" if n else "no changes")
@@ -73,6 +105,8 @@ def _subject(report: RunReport, today: date) -> str:
     if report.failing_sites:
         k = len(report.failing_sites)
         parts.append(f"{k} site{'' if k == 1 else 's'} failing")
+    if carried:
+        parts.append(f"{_carried_count(carried)} carried over")
     return f"Competitor prices {today:%d %b %Y}: {', '.join(parts)}"
 
 
@@ -80,9 +114,15 @@ def _health_lines(report: RunReport) -> list[str]:
     return [("NEW: " if s.newly_failing else "") + s.describe() for s in report.failing_sites]
 
 
-def _text(subject: str, groups: Groups, health: list[str], report: RunReport) -> str:
+def _text(
+    subject: str,
+    groups: Groups,
+    health: list[str],
+    report: RunReport,
+    carried: Sequence[PendingRun],
+) -> str:
     lines = [subject, ""]
-    if not groups and not health:
+    if not groups and not health and not carried:
         lines += ["Nothing changed since the last check.", ""]
     for title, items in groups:
         lines.append(title.upper())
@@ -91,6 +131,15 @@ def _text(subject: str, groups: Groups, health: list[str], report: RunReport) ->
         lines.append("")
     if health:
         lines += ["SITE HEALTH", *(f"- {line}" for line in health), ""]
+    if carried:
+        lines.append(CARRIED_TITLE.upper())
+        for run in carried:
+            lines.append(_run_label(run.started_at))
+            for item in run.items:
+                lines.append(f"- [{item['section']}] {item['text']}")
+                if item["url"]:
+                    lines.append(f"  {item['url']}")
+        lines.append("")
     lines += [report.summary(), f"Run {report.run_id}"]
     return "\n".join(lines) + "\n"
 
@@ -109,11 +158,17 @@ _ALERT = "color:#b00020"
 _FOOT = "color:#666;font-size:13px;margin-top:24px"
 
 
-def _html(subject: str, groups: Groups, health: list[str], report: RunReport) -> str:
+def _html(
+    subject: str,
+    groups: Groups,
+    health: list[str],
+    report: RunReport,
+    carried: Sequence[PendingRun],
+) -> str:
     # Everything that came from a competitor's page (titles, errors) is escaped.
     esc = html.escape
     parts = [f"<div style='{_BODY}'>", f"<h1 style='{_H1}'>{esc(subject)}</h1>"]
-    if not groups and not health:
+    if not groups and not health and not carried:
         parts.append("<p>Nothing changed since the last check.</p>")
     for title, items in groups:
         parts.append(f"<h2 style='{_H2}'>{esc(title)}</h2><ul style='{_UL}'>")
@@ -125,6 +180,19 @@ def _html(subject: str, groups: Groups, health: list[str], report: RunReport) ->
         parts.append(f"<h2 style='{_H2};{_ALERT}'>Site health</h2><ul style='{_UL}'>")
         parts += [f"<li style='{_LI}'>{esc(line)}</li>" for line in health]
         parts.append("</ul>")
+    if carried:
+        parts.append(f"<h2 style='{_H2}'>{esc(CARRIED_TITLE)}</h2>")
+        for run in carried:
+            parts.append(f"<p style='{_FOOT};margin:8px 0 4px'>{_run_label(run.started_at)}</p>")
+            parts.append(f"<ul style='{_UL}'>")
+            for item in run.items:
+                link = ""
+                if item["url"]:
+                    href = esc(item["url"], quote=True)
+                    link = f" <a href='{href}' style='{_LINK}'>view</a>"
+                text = f"{esc(item['section'])}: {esc(item['text'])}"
+                parts.append(f"<li style='{_LI}'>{text}{link}</li>")
+            parts.append("</ul>")
     parts.append(
         f"<p style='{_FOOT}'>{esc(report.summary())}<br>Run {esc(report.run_id)}</p></div>"
     )
@@ -139,7 +207,13 @@ def _slack_section(text: str) -> dict:
     return {"type": "section", "text": {"type": "mrkdwn", "text": text[:3000]}}
 
 
-def _slack(subject: str, groups: Groups, health: list[str], report: RunReport) -> dict:
+def _slack(
+    subject: str,
+    groups: Groups,
+    health: list[str],
+    report: RunReport,
+    carried: Sequence[PendingRun],
+) -> dict:
     blocks: list[dict] = [{"type": "header", "text": {"type": "plain_text", "text": subject[:150]}}]
     for title, items in groups:
         bullets = "\n".join(
@@ -149,22 +223,31 @@ def _slack(subject: str, groups: Groups, health: list[str], report: RunReport) -
     if health:
         bullets = "\n".join(f"• {_slack_escape(line)}" for line in health)
         blocks.append(_slack_section(f"*Site health*\n{bullets}"))
-    if not groups and not health:
+    for run in carried:
+        bullets = "\n".join(
+            f"• {_slack_escape(i['section'])}: {_slack_escape(i['text'])}"
+            + (f" <{i['url']}|view>" if i["url"] else "")
+            for i in run.items
+        )
+        label = f"*{CARRIED_TITLE}* ({_run_label(run.started_at)})"
+        blocks.append(_slack_section(f"{label}\n{bullets}"))
+    if not groups and not health and not carried:
         blocks.append(_slack_section("Nothing changed since the last check."))
     summary = {"type": "mrkdwn", "text": _slack_escape(report.summary())}
     blocks.append({"type": "context", "elements": [summary]})
     return {"text": subject, "blocks": blocks[:50]}
 
 
-def build_digest(report: RunReport, today: date) -> Digest:
+def build_digest(report: RunReport, today: date, carried: Sequence[PendingRun] = ()) -> Digest:
+    """This run's digest, plus a labelled section for `carried` runs that never got through."""
     groups = _group(report.changes)
     health = _health_lines(report)
-    subject = _subject(report, today)
+    subject = _subject(report, today, carried)
     return Digest(
         subject,
-        _text(subject, groups, health, report),
-        _html(subject, groups, health, report),
-        _slack(subject, groups, health, report),
+        _text(subject, groups, health, report, carried),
+        _html(subject, groups, health, report, carried),
+        _slack(subject, groups, health, report, carried),
     )
 
 
@@ -296,28 +379,91 @@ def send_slack(digest: Digest, webhook_url: str, client: httpx.Client | None = N
     return Delivery("slack", True, "posted")
 
 
+def enabled_channels(config: Config) -> list[Channel]:
+    channels: list[Channel] = []
+    if config.alerts.email.enabled:
+        channels.append("email")
+    if config.alerts.slack.enabled:
+        channels.append("slack")
+    return channels
+
+
 def deliver(
-    digest: Digest,
+    digests: Mapping[Channel, Digest],
     config: Config,
     env: Mapping[str, str],
     *,
     connect: SmtpFactory = connect_smtp,
     http_client: httpx.Client | None = None,
 ) -> list[Delivery]:
-    """Send the digest on every enabled channel. Never raises; each result says what happened."""
+    """Send each channel its digest. Never raises; each result says what happened."""
     results: list[Delivery] = []
-    if config.alerts.email.enabled:
+    if "email" in digests:
         try:
             settings = smtp_settings(env)
         except ValueError as exc:
             results.append(Delivery("email", False, str(exc)))
         else:
-            results.append(send_email(digest, config.alerts.email.to, settings, connect))
-    if config.alerts.slack.enabled:
+            results.append(send_email(digests["email"], config.alerts.email.to, settings, connect))
+    if "slack" in digests:
         try:
             url = slack_webhook(env)
         except ValueError as exc:
             results.append(Delivery("slack", False, str(exc)))
         else:
-            results.append(send_slack(digest, url, http_client))
+            results.append(send_slack(digests["slack"], url, http_client))
     return results
+
+
+@dataclass(frozen=True)
+class Notification:
+    channels: list[Channel]  # enabled channels
+    digests: dict[Channel, Digest]  # what each channel was (or would be) sent
+    carried: dict[Channel, list[PendingRun]]
+    deliveries: list[Delivery]
+
+
+def notify(
+    report: RunReport,
+    started_at: datetime,
+    config: Config,
+    store: Store,
+    env: Mapping[str, str],
+    *,
+    dry_run: bool = False,
+    connect: SmtpFactory = connect_smtp,
+    http_client: httpx.Client | None = None,
+) -> Notification:
+    """Record this run's digest items, then send each channel this run's digest plus anything
+    from earlier runs that never reached it. Items are marked delivered only after a
+    successful send. A dry run records nothing, marks nothing and sends nothing.
+    """
+    channels = enabled_channels(config)
+    items = digest_items(report)
+    if not dry_run:
+        store.record_run(
+            report.run_id, started_at.isoformat(timespec="seconds"), list(channels), items
+        )
+
+    digests: dict[Channel, Digest] = {}
+    carried: dict[Channel, list[PendingRun]] = {}
+    for channel in channels:
+        pending = store.pending_runs(channel, exclude_run=report.run_id)
+        if should_send(report, config.alerts.always_send_summary, pending):
+            digests[channel] = build_digest(report, started_at.date(), pending)
+            carried[channel] = pending
+
+    if dry_run or not digests:
+        return Notification(channels, digests, carried, [])
+
+    deliveries = deliver(digests, config, env, connect=connect, http_client=http_client)
+    now = datetime.now(UTC).isoformat(timespec="seconds")
+    for result in deliveries:
+        if not result.ok:
+            continue
+        runs = [p.run_id for p in carried[result.channel]] + ([report.run_id] if items else [])
+        for run_id in runs:
+            store.record_delivery(
+                run_id, result.channel, delivered_in=report.run_id, delivered_at=now
+            )
+    return Notification(channels, digests, carried, deliveries)

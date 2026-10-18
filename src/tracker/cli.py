@@ -10,7 +10,7 @@ import typer
 from dotenv import load_dotenv
 
 from tracker import alerts, sheets
-from tracker.alerts import Delivery, build_digest, deliver, missing_secrets, should_send
+from tracker.alerts import Delivery, build_digest, missing_secrets, notify, should_send
 from tracker.changes import format_money
 from tracker.config import Config, ConfigError, load_config
 from tracker.fetch import Fetcher
@@ -116,41 +116,56 @@ def run(
         report = build_report(result, store)
         latest = store.latest_observations()
 
-    typer.echo(f"run {result.run_id}: {report.summary()}")
-    for change in report.changes:
-        typer.echo(f"  • {change.describe()}")
-    failures = [(p, o) for p, o in result.observations if not o.ok]
-    if failures:
-        typer.echo("failed this run:")
-        for product, observation in failures:
-            typer.echo(f"  ✗ {product.url}: {observation.status} ({observation.error})")
-    for site in report.failing_sites:
-        typer.echo(f"  ! {site.describe()}")
+        typer.echo(f"run {result.run_id}: {report.summary()}")
+        for change in report.changes:
+            typer.echo(f"  • {change.describe()}")
+        failures = [(p, o) for p, o in result.observations if not o.ok]
+        if failures:
+            typer.echo("failed this run:")
+            for product, observation in failures:
+                typer.echo(f"  ✗ {product.url}: {observation.status} ({observation.error})")
+        for site in report.failing_sites:
+            typer.echo(f"  ! {site.describe()}")
 
-    digest = build_digest(report, result.started_at.date())
-    send = should_send(report, cfg.alerts.always_send_summary)
+        deliveries: list[Delivery] = []
+        if cfg.sheets.enabled and not dry_run:
+            deliveries.append(
+                sheets.export(
+                    cfg, os.environ, result.observations, latest, open_fn=_open_spreadsheet
+                )
+            )
+        sent = notify(
+            report, result.started_at, cfg, store, os.environ,
+            dry_run=dry_run, connect=_smtp_connect, http_client=_slack_client,
+        )  # fmt: skip
+
+    for channel, pending in sent.carried.items():
+        if pending:
+            n = sum(len(run.items) for run in pending)
+            typer.echo(f"{channel}: carrying over {n} item(s) from {len(pending)} earlier run(s)")
+
     if dry_run:
         typer.echo("(dry run: nothing saved, no digest sent, Sheets not updated)")
-        if send:
-            typer.echo("\n--- digest preview ---\n" + digest.text)
+        preview = next(iter(sent.digests.values()), None)
+        if preview is None and not sent.channels:
+            should = should_send(report, cfg.alerts.always_send_summary)
+            preview = build_digest(report, result.started_at.date()) if should else None
+        if preview is not None:
+            typer.echo("\n--- digest preview ---\n" + preview.text)
         else:
             typer.echo("digest: would not be sent (nothing changed)")
         return
 
-    deliveries: list[Delivery] = []
-    if cfg.sheets.enabled:
-        deliveries.append(
-            sheets.export(cfg, os.environ, result.observations, latest, open_fn=_open_spreadsheet)
-        )
-    if not send:
-        typer.echo("digest: not sent (nothing changed)")
-    elif not (cfg.alerts.email.enabled or cfg.alerts.slack.enabled):
+    if not sent.channels and should_send(report, cfg.alerts.always_send_summary):
         typer.echo("digest: no channel enabled (alerts.email or alerts.slack)")
-    else:
-        deliveries += deliver(digest, cfg, os.environ, connect=_smtp_connect)
+    elif not sent.digests:
+        typer.echo("digest: not sent (nothing changed)")
+    deliveries += sent.deliveries
     for delivery in deliveries:
         mark = "✓" if delivery.ok else "✗"
         typer.echo(f"{delivery.channel}: {mark} {delivery.detail}")
+    if any(not d.ok and d.channel != "sheets" for d in sent.deliveries):
+        typer.echo("  (undelivered changes will be included in the next digest that gets through)")
     typer.echo(f"saved to {db}")
     if any(not d.ok for d in deliveries):
         raise typer.Exit(code=1)
@@ -159,6 +174,7 @@ def run(
 # Seams for tests: the real SMTP connection and Google client.
 _smtp_connect = alerts.connect_smtp
 _open_spreadsheet = sheets.open_spreadsheet
+_slack_client = None  # None: alerts.send_slack makes its own httpx client
 
 
 def _make_fetcher(cfg: Config) -> Fetcher:
