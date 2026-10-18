@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any, Literal
 from urllib.parse import urlparse
 
+import soupsieve
 import yaml
 from pydantic import (
     BaseModel,
@@ -18,6 +19,8 @@ from pydantic import (
     field_validator,
     model_validator,
 )
+
+from tracker import __version__
 
 MAX_SITES = 10
 MAX_PRODUCTS = 200
@@ -42,6 +45,15 @@ class Selectors(_Strict):
     title: str = Field(min_length=1)
     price: str = Field(min_length=1)
     stock: str = Field(min_length=1)
+
+    @field_validator("title", "price", "stock")
+    @classmethod
+    def _valid_css(cls, value: str) -> str:
+        try:
+            soupsieve.compile(value)
+        except soupsieve.SelectorSyntaxError as exc:
+            raise ValueError(f"invalid CSS selector {value!r}: {exc.args[0]}") from exc
+        return value
 
 
 class Site(_Strict):
@@ -117,7 +129,24 @@ class Sheets(_Strict):
         return self
 
 
+class Fetch(_Strict):
+    contact: str = Field(description="Email address included in the User-Agent")
+    timeout_seconds: float = Field(default=20, gt=0, le=120)
+
+    @field_validator("contact")
+    @classmethod
+    def _valid_contact(cls, value: str) -> str:
+        if not EMAIL_PATTERN.match(value):
+            raise ValueError(f"must be an email address (got {value!r})")
+        return value
+
+    @property
+    def user_agent(self) -> str:
+        return f"price-tracker/{__version__} (+mailto:{self.contact})"
+
+
 class Config(_Strict):
+    fetch: Fetch
     sites: list[Site] = Field(min_length=1, max_length=MAX_SITES)
     products: list[Product] = Field(min_length=1, max_length=MAX_PRODUCTS)
     alerts: Alerts = Field(default_factory=Alerts)
@@ -161,6 +190,11 @@ class Config(_Strict):
 
     def site(self, name: str) -> Site:
         return next(s for s in self.sites if s.name == name)
+
+    def site_for_url(self, url: str) -> Site | None:
+        """The configured site whose base_url host matches this URL, if any."""
+        host = _host(url)
+        return next((s for s in self.sites if _host(str(s.base_url)) == host), None)
 
 
 def _host(url: str) -> str:

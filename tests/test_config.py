@@ -15,7 +15,10 @@ def error_for(path) -> str:
 def test_example_config_loads():
     config = load_config(EXAMPLE_CONFIG)
 
-    assert [s.name for s in config.sites] == ["books-sandbox"]
+    assert [s.name for s in config.sites] == ["books-sandbox", "scraping-dev"]
+    assert config.fetch.contact == "yahanihwgm@gmail.com"
+    assert config.fetch.user_agent.startswith("price-tracker/")
+    assert "mailto:yahanihwgm@gmail.com" in config.fetch.user_agent
     site = config.site("books-sandbox")
     assert site.fetch_mode == "http"
     assert site.delay_seconds == 5
@@ -120,7 +123,7 @@ def test_negative_my_price(example_data, write_config):
 def test_unknown_product_site(example_data, write_config):
     example_data["products"][0]["site"] = "rival-x"
     msg = error_for(write_config(example_data))
-    assert "products[0].site: unknown site 'rival-x' (known: books-sandbox)" in msg
+    assert "products[0].site: unknown site 'rival-x' (known: books-sandbox, scraping-dev)" in msg
 
 
 def test_product_host_must_match_site(example_data, write_config):
@@ -140,7 +143,7 @@ def test_duplicate_product_url(example_data, write_config):
 
 def test_duplicate_site_name(example_data, write_config):
     example_data["sites"].append(dict(example_data["sites"][0]))
-    assert "sites[1].name: duplicate site name" in error_for(write_config(example_data))
+    assert "sites[2].name: duplicate site name" in error_for(write_config(example_data))
 
 
 def test_too_many_sites(example_data, write_config):
@@ -195,3 +198,32 @@ def test_error_message_names_the_file(example_data, write_config):
     example_data["sites"][0]["fetch_mode"] = "chrome"
     path = write_config(example_data)
     assert error_for(path).startswith(str(path))
+
+
+def test_fetch_section_is_required(example_data, write_config):
+    del example_data["fetch"]
+    assert "fetch: missing required field" in error_for(write_config(example_data))
+
+
+def test_fetch_contact_must_be_email(example_data, write_config):
+    example_data["fetch"]["contact"] = "call me"
+    assert "fetch.contact: must be an email address" in error_for(write_config(example_data))
+
+
+def test_fetch_timeout_bounds(example_data, write_config):
+    example_data["fetch"]["timeout_seconds"] = 0
+    assert "fetch.timeout_seconds:" in error_for(write_config(example_data))
+
+
+def test_invalid_css_selector(example_data, write_config):
+    example_data["sites"][0]["selectors"]["price"] = "p.price[["
+    assert "sites[0].selectors.price: invalid CSS selector 'p.price[['" in error_for(
+        write_config(example_data)
+    )
+
+
+def test_site_for_url():
+    config = load_config(EXAMPLE_CONFIG)
+    assert config.site_for_url("https://books.toscrape.com/catalogue/x").name == "books-sandbox"
+    assert config.site_for_url("https://www.web-scraping.dev/product/9").name == "scraping-dev"
+    assert config.site_for_url("https://unknown.example/x") is None

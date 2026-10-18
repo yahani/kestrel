@@ -1,11 +1,23 @@
 import copy
 from pathlib import Path
 
+import httpx
 import pytest
 import yaml
 
 ROOT = Path(__file__).resolve().parent.parent
 EXAMPLE_CONFIG = ROOT / "config.example.yaml"
+FIXTURES = ROOT / "tests" / "fixtures"
+
+
+@pytest.fixture(autouse=True)
+def _no_network(monkeypatch):
+    """Fail any test that tries a real HTTP request. httpx.MockTransport still works."""
+
+    def _blocked(self, request):
+        raise RuntimeError(f"tests must not hit the network: {request.method} {request.url}")
+
+    monkeypatch.setattr(httpx.HTTPTransport, "handle_request", _blocked)
 
 
 @pytest.fixture

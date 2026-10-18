@@ -1,5 +1,9 @@
 # Copy to config.yaml and edit. Secrets go in environment variables, never here.
 
+fetch:
+  contact: yahanihwgm@gmail.com   # sent in the User-Agent so site owners can reach you
+  timeout_seconds: 20
+
 sites:
   - name: books-sandbox
     base_url: https://books.toscrape.com
@@ -10,6 +14,16 @@ sites:
       price: "div.product_main p.price_color"
       stock: "div.product_main p.availability"
     currency: GBP
+
+  - name: scraping-dev
+    base_url: https://web-scraping.dev
+    fetch_mode: http
+    delay_seconds: 5
+    selectors:
+      title: "h3.product-title"
+      price: "span.product-price"
+      stock: "button.add-to-cart"
+    currency: USD
 
 products:
   - site: books-sandbox
