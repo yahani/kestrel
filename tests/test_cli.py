@@ -168,7 +168,7 @@ def test_run_prints_summary_and_changes(shop_cli):
     second = invoke("run", "-c", config)
     assert second.exit_code == 0, second.output
     assert "4 products, 3 ok, 1 failed, 2 changes" in second.output
-    assert "• rival-x cut Blue Mug from 24.00 USD to 19.50 USD (-18.8%), below your 23.00 USD" in (
+    assert "• rival-x cut Blue Mug from $24.00 to $19.50 (-18.8%), below your $23.00" in (
         second.output
     )
     assert "✗ http://127.0.0.1:8000/product/red-mug: http_error (HTTP 404)" in second.output
@@ -207,8 +207,8 @@ def test_history_shows_newest_first(shop_cli):
     assert lines[1] == "site rival-x, sku MUG-BLUE, my price 23.0"
     rows = [line for line in lines if line[:4].isdigit()]  # rows start with the timestamp
     assert len(rows) == 2
-    assert "19.50 USD" in rows[0] and "out_of_stock" in rows[0]
-    assert "24.00 USD" in rows[1] and "in_stock (12)" in rows[1]
+    assert "$19.50" in rows[0] and "out_of_stock" in rows[0]
+    assert "$24.00" in rows[1] and "in_stock (12)" in rows[1]
     assert "Blue Mug" in rows[1]
 
 

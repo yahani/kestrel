@@ -2,7 +2,7 @@ from decimal import Decimal
 
 import pytest
 
-from tracker.changes import detect_changes
+from tracker.changes import detect_changes, format_money
 from tracker.store import Observation, ProductRow
 
 THRESHOLD = Decimal("1")
@@ -67,14 +67,14 @@ def test_price_down():
     assert change.percent == Decimal("-18.8")
     assert change.currency == "USD"
     assert change.undercut is False
-    assert change.describe() == "rival-x cut Blue Mug from 24.00 USD to 19.50 USD (-18.8%)"
+    assert change.describe() == "rival-x cut Blue Mug from $24.00 to $19.50 (-18.8%)"
 
 
 def test_price_up():
     [change] = detect(ok("26.40"), ok("24.00"))
     assert change.kind == "price_up"
     assert change.percent == Decimal("10.0")
-    assert change.describe() == "rival-x raised Blue Mug from 24.00 USD to 26.40 USD (+10.0%)"
+    assert change.describe() == "rival-x raised Blue Mug from $24.00 to $26.40 (+10.0%)"
 
 
 def test_price_change_below_threshold_is_ignored():
@@ -157,7 +157,7 @@ def test_currency_change_is_reported_not_compared():
     [change] = detect(ok("20.00", currency="EUR"), ok("24.00", currency="USD"))
     assert change.kind == "currency_changed"
     assert change.old_currency == "USD"
-    assert change.describe() == "rival-x changed currency on Blue Mug: 24.00 USD to 20.00 EUR"
+    assert change.describe() == "rival-x changed currency on Blue Mug: $24.00 to €20.00"
 
 
 def test_missing_price_on_either_side_skips_price_checks():
@@ -172,7 +172,7 @@ def test_price_drop_below_my_price_is_flagged_on_the_change():
     [change] = detect(ok("19.50"), ok("24.00"), product=UNDERCUT_PRODUCT)
     assert change.kind == "price_down"
     assert change.undercut is True
-    assert change.describe().endswith("(-18.8%), below your 22.00 USD")
+    assert change.describe().endswith("(-18.8%), below your $22.00")
 
 
 def test_price_drop_staying_above_my_price_is_not_undercut():
@@ -184,7 +184,7 @@ def test_small_move_below_my_price_still_flags_undercut():
     product = ProductRow(1, "rival-x", "http://shop/x", None, Decimal("49.95"), True)
     [change] = detect(ok("49.90"), ok("50.00"), product=product)  # -0.2%, under threshold
     assert change.kind == "undercut"
-    assert change.describe() == "rival-x now undercuts you on Blue Mug: 49.90 USD vs your 49.95 USD"
+    assert change.describe() == "rival-x now undercuts you on Blue Mug: $49.90 vs your $49.95"
 
 
 def test_undercut_not_repeated_while_staying_below():
@@ -243,4 +243,21 @@ def test_undercut_with_matching_currency():
 def test_my_price_shown_with_competitor_precision():
     product = ProductRow(1, "rival-x", "http://shop/x", None, Decimal("23.0"), True)
     [change] = detect(ok("19.50"), ok("24.00"), product=product)
-    assert change.describe().endswith("below your 23.00 USD")
+    assert change.describe().endswith("below your $23.00")
+
+
+@pytest.mark.parametrize(
+    ("amount", "currency", "expected"),
+    [
+        ("24.00", "USD", "$24.00"),
+        ("51.77", "GBP", "£51.77"),
+        ("9.99", "EUR", "€9.99"),
+        ("1299", "JPY", "¥1299"),
+        ("4500.00", "LKR", "LKR 4500.00"),
+        ("12.00", None, "12.00"),
+        (None, "USD", "-"),
+    ],
+)
+def test_format_money(amount, currency, expected):
+    value = Decimal(amount) if amount is not None else None
+    assert format_money(value, currency) == expected

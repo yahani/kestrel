@@ -64,9 +64,9 @@ def test_two_price_changes_and_one_stock_change_give_exactly_three_changes(mock_
     result = run(mock_shop, store)
 
     assert described(result) == [
-        "rival-x cut Blue Mug from 24.00 USD to 19.50 USD (-18.8%), below your 23.00 USD",
+        "rival-x cut Blue Mug from $24.00 to $19.50 (-18.8%), below your $23.00",
         "rival-x is out of stock on Red Mug",
-        "rival-x raised Green Teapot from 45.00 USD to 49.50 USD (+10.0%)",
+        "rival-x raised Green Teapot from $45.00 to $49.50 (+10.0%)",
     ]
 
 

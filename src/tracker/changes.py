@@ -20,6 +20,18 @@ ChangeKind = Literal[
 ]
 
 
+# Unambiguous once we know the ISO code; other currencies show as "CAD 12.00".
+_DISPLAY_SYMBOLS = {"USD": "$", "GBP": "£", "EUR": "€", "JPY": "¥", "INR": "₹"}
+
+
+def format_money(amount: Decimal | None, currency: str | None) -> str:
+    if amount is None:
+        return "-"
+    if currency in _DISPLAY_SYMBOLS:
+        return f"{_DISPLAY_SYMBOLS[currency]}{amount}"
+    return f"{currency} {amount}" if currency else str(amount)
+
+
 @dataclass(frozen=True)
 class Change:
     kind: ChangeKind
@@ -46,21 +58,24 @@ class Change:
 
     def describe(self) -> str:
         name = self.title or self.product.url
-        cur = f" {self.currency}" if self.currency else ""
+
+        def money(amount: Decimal | None) -> str:
+            return format_money(amount, self.currency)
+
         match self.kind:
             case "price_down" | "price_up":
                 verb = "cut" if self.kind == "price_down" else "raised"
                 text = (
-                    f"{self.product.site} {verb} {name} from {self.old_price}{cur} "
-                    f"to {self.new_price}{cur} ({self.percent:+}%)"
+                    f"{self.product.site} {verb} {name} from {money(self.old_price)} "
+                    f"to {money(self.new_price)} ({self.percent:+}%)"
                 )
                 if self.undercut:
-                    text += f", below your {self._my_price()}{cur}"
+                    text += f", below your {money(self._my_price())}"
                 return text
             case "currency_changed":
                 return (
                     f"{self.product.site} changed currency on {name}: "
-                    f"{self.old_price} {self.old_currency} to {self.new_price}{cur}"
+                    f"{format_money(self.old_price, self.old_currency)} to {money(self.new_price)}"
                 )
             case "out_of_stock":
                 return f"{self.product.site} is out of stock on {name}"
@@ -71,7 +86,7 @@ class Change:
             case "undercut":
                 return (
                     f"{self.product.site} now undercuts you on {name}: "
-                    f"{self.new_price}{cur} vs your {self._my_price()}{cur}"
+                    f"{money(self.new_price)} vs your {money(self._my_price())}"
                 )
             case "new_failure":
                 return f"{self.product.site}: could not check {name} ({self.status}: {self.error})"

@@ -7,6 +7,7 @@ from typing import Annotated
 
 import typer
 
+from tracker.changes import format_money
 from tracker.config import Config, ConfigError, load_config
 from tracker.fetch import Fetcher
 from tracker.parse import parse_page
@@ -163,7 +164,7 @@ def test_selectors(
 
 
 def _history_line(o: Observation) -> str:
-    price = f"{o.price} {o.currency}" if o.price is not None else "-"
+    price = format_money(o.price, o.currency)
     stock = o.stock_status or "-"
     if o.stock_qty is not None:
         stock += f" ({o.stock_qty})"

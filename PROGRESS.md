@@ -3,7 +3,7 @@
 Updated after every step. Requirement IDs refer to the spec (F1–F12). How the pieces fit
 together is in [ARCHITECTURE.md](ARCHITECTURE.md).
 
-_Last updated: 2026-10-18, end of session 3._
+_Last updated: 2026-10-18, session 4 in progress._
 
 ## 1. Done, by requirement
 
@@ -28,11 +28,12 @@ _Last updated: 2026-10-18, end of session 3._
 |---|---|---|---|
 | 1 | Skeleton, F1, F11 shell, CI | ✅ | `89af1d0` … `196327b` |
 | 2 | F2, F3, F4, `test-selectors`, fixtures, ARCHITECTURE.md | ✅ | `1e5fdc8` … `ec49626` |
-| 3 | F4 price fix; F5, F6, F7, `history`, `run` (prints), mock site | ✅ | `1a3d1c6` … this commit |
+| 3 | F4 price fix; F5, F6, F7, `history`, `run` (prints), mock site | ✅ | `1a3d1c6` … `fc46101` |
+| 4 | F8 (email; Slack off), F9 (untested live), F12, hooked into `run` | 🔄 in progress | |
 
 ## 2. Test results
 
-Run on 2026-10-18 with `uv run pytest --cov=tracker` (after `history` and the pipeline):
+Run on 2026-10-18 with `uv run pytest --cov=tracker` (after money formatting):
 
 | Suite | Tests | Result |
 |---|---|---|
@@ -41,10 +42,10 @@ Run on 2026-10-18 with `uv run pytest --cov=tracker` (after `history` and the pi
 | `test_parse.py` | 85 | ✅ pass |
 | `test_cli.py` | 26 | ✅ pass |
 | `test_store.py` | 19 | ✅ pass |
-| `test_changes.py` | 32 | ✅ pass |
+| `test_changes.py` | 39 | ✅ pass |
 | `test_mock_site.py` | 18 | ✅ pass |
 | `test_pipeline.py` | 14 | ✅ pass |
-| **Total** | **262** | **✅ all pass** |
+| **Total** | **269** | **✅ all pass** |
 
 Coverage: 100% on `config.py`, `fetch.py`, `parse.py` and `cli.py` (spec target is 80%; the
 Playwright loader is excluded because it needs a real browser). `ruff check` and
@@ -65,13 +66,14 @@ Tests make no network calls: real HTTP is blocked in `tests/conftest.py`.
 
 ## 3. Next
 
-Session 3 is done. Session 4 needs a plan and your approval:
+Session 4, approved: **email digest only, Slack built but switched off, Sheets built and
+tested against a fake client but not against real Google.** In this order:
 
-- **F8** One email (SMTP) and/or Slack digest per run, nothing when there are no changes
-  unless `always_send_summary` is on.
-- **F9** Google Sheets export: append observations, refresh a "Latest" tab.
-- **F12** Run summary and a "selectors may have changed" alert when a site fails 2 runs in a row.
-- Hook all three into `tracker run`, which currently prints the changes.
+- ✅ Money shown as `$24.00` / `£51.77` / `LKR 4500.00` in change text and `history`.
+- **F12** run summary + "selectors may have changed" alert after 2 failed runs per site.
+- **F8** one email digest per run (text + HTML), Slack sender off by default.
+- **F9** Sheets export: append observations, refresh "Latest".
+- Hook all three into `tracker run`; `--dry-run` previews the digest without sending.
 
 **By hand, session 3** (done 2026-10-18 against the real mock server on localhost): run 1
 gave 4 ok and 0 changes. Then blue-mug went to 19.50, green-teapot to 49.50 and red-mug to
@@ -80,15 +82,15 @@ MUG-BLUE` showed all 3 observations. Each run took 20 s (5 s delay × 4 products
 
 ## 4. Blocked or waiting on you
 
-- **Waiting:** approval of the session 4 plan (not written yet).
 - **Waiting:** your review of session 3 (see the list in the session report).
-- **Needed for session 4:** whether the demo digest goes by email, Slack or both, and SMTP
-  details or a Slack webhook to test with (they go in `.env`, never in the repo).
-  Sheets also needs a Google service account.
+- **Decided 2026-10-18:** email only for the demo digest; Sheets built and left untested.
+- **Later, walkthroughs you asked for:** (1) SMTP setup for the email digest, (2) Google
+  service account setup for Sheets. Until then, "email arrives on a phone" and "Sheet matches
+  the database" stay unticked.
 - **`REVIEW.md`:** an untracked file in the repo root that wasn't written in this session.
   It's left alone and uncommitted. Its 5 "should fix" points were each checked and fixed in
   `61ff94e`.
 - **Not blocking yet:** no GitHub remote, so CI has only run locally. Needed by session 5
   (F10); `gh` isn't installed.
-- **Open questions from the spec** (needed by sessions 4–5): GitHub Actions or a paid host,
+- **Open questions from the spec** (needed by session 5): GitHub Actions or a paid host,
   and whether to publish the mock site.
