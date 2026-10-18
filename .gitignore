@@ -28,3 +28,6 @@ build/
 
 # Mock shop state
 mock_site/state.json
+
+# Local demo config with a real recipient
+mock_site/demo-email.yaml

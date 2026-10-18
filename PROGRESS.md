@@ -105,7 +105,9 @@ Session 4 is done. Session 5 needs a plan and your approval:
 - **Waiting:** approval of the session 5 plan (not written yet).
 - **Waiting:** your review of session 4 (see the list in the session report).
 - **Walkthroughs you asked for:**
-  1. SMTP setup for the email digest. This unblocks "email arrives on a phone".
+  1. SMTP setup for the email digest: **in progress**. `.env` has all five `SMTP_*` values,
+     and `check-config` finds them. The gitignored `mock_site/demo-email.yaml` sends to your
+     Gmail. Next: a real send, then check it on your phone.
   2. Google service account setup for Sheets. This unblocks "Sheet matches the database".
 - **Decided 2026-10-18:** email only for the demo digest (Slack built, off); Sheets built,
   not yet tested against real Google.
