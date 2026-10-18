@@ -8,7 +8,7 @@ every build session; parts not built yet are marked **planned**.
 | 1 | Repo skeleton, config loading (F1), CLI shell (F11), CI | ✅ done |
 | 2 | Fetching (F2), robots.txt (F3), parsing (F4), `test-selectors` | ✅ done |
 | 3 | Price fix (F4), SQLite store (F5), change detection (F6, F7), `history` + `run` printing changes (F11), mock competitor site | ✅ done |
-| 4 | Email/Slack digest (F8), Sheets export (F9), health report (F12), hooked into `run` | ✅ done (Sheets not yet tested against real Google) |
+| 4 | Email/Slack digest (F8), Sheets export (F9), health report (F12), hooked into `run` | ✅ done (email and Sheets both verified for real) |
 | 5 | GitHub Actions schedule (F10), README, demo | planned |
 
 ## The daily pipeline
@@ -26,7 +26,7 @@ flowchart LR
     store --> detect["Detect changes<br/>changes.py ✅"]
     detect --> report["Run report<br/>report.py ✅"]
     report --> alert["Digest: email / Slack<br/>alerts.py ✅"]
-    store --> sheets["Google Sheet<br/>sheets.py ✅ · untested live"]
+    store --> sheets["Google Sheet<br/>sheets.py ✅"]
 ```
 
 ## Modules

@@ -17,7 +17,7 @@ _Last updated: 2026-10-18, end of session 4._
 | F6 | Detect changes | ✅ done | `changes.py` | Compared with the last *successful* observation: price up/down with signed % (threshold inclusive, default 1%), out of stock, back in stock, title change, currency change, new failure (repeat failures left to F12). First observation → no changes. Stock is compared with the last observation whose stock was known, so `in → unknown → out` still reports out of stock. |
 | F7 | Compare with own price | ✅ done | `changes.py` | Price changes carry an `undercut` flag when the new price is below `my_price`. A separate `undercut` change fires only when a move under the threshold crosses below `my_price`, so one event is never reported twice. Only flagged when the competitor's currency matches the site currency (`my_price` is assumed to be in it). |
 | F8 | Alert | ✅ done (real send through Gmail accepted) | `alerts.py` | One digest per run as text + HTML email (sections: Undercutting you, Price changes, Stock, Other, Couldn't check, Site health) and a Slack Block Kit payload. Competitor text is escaped. Not sent when nothing changed unless `always_send_summary` (a newly failing site also triggers a send). SMTP via STARTTLS/SSL (trusting the system store **plus certifi**, since python.org's macOS Python ships with no root certificates) with secrets from env/`.env`; Slack sender built, off in config. `run` sends it; exits 1 if a channel fails. |
-| F9 | Export to Sheets | 🟡 done in code, in `run`; **untested against real Google** | `sheets.py` | Service account from `GOOGLE_SERVICE_ACCOUNT_JSON`. Appends each run's observations to "Observations" and rewrites "Latest" (one row per active product, with an `undercuts_me` column). Creates missing tabs with a frozen header. RAW writes, so a competitor title can't run as a formula. Accepts the sheet ID or its URL. Tested against a fake whose method signatures are checked against gspread 6.2.1. |
+| F9 | Export to Sheets | ✅ done (real export to Google Sheets verified 2026-10-18) | `sheets.py` | Service account from `GOOGLE_SERVICE_ACCOUNT_JSON`. Appends each run's observations to "Observations" and rewrites "Latest" (one row per active product, with an `undercuts_me` column). Creates missing tabs with a frozen header. RAW writes, so a competitor title can't run as a formula. Accepts the sheet ID or its URL. Tested against a fake whose method signatures are checked against gspread 6.2.1, and against a real sheet: run `20261018T100321Z-318c90` wrote 4 rows, and Latest matched the database with 0 mismatches. |
 | F10 | Schedule | ⏳ session 5 | — | CI workflow (lint + tests) exists; the daily cron workflow doesn't yet. |
 | F11 | CLI | ✅ done | `cli.py`, `pipeline.py` | `run [--dry-run]`, `check-config` (also warns about missing secrets for enabled channels), `test-selectors <url> [--html] [--save]`, `history <url\|sku\|url part> [--limit]`. `--dry-run` previews the digest, saves nothing and sends nothing. Secrets are read from `.env` next to the config or in the current folder; real env vars win. |
 | F12 | Health report | ✅ done | `report.py` | Summary (checked, ok, failed, changes, seconds). A site is failing in a run when **all** its products fail; at 2 runs in a row → "selectors may have changed" alert, sent **once** (when the streak hits 2), then still listed while it lasts. |
@@ -74,7 +74,7 @@ Tests make no network calls: real HTTP is blocked in `tests/conftest.py`.
 - [x] Changing two prices and one stock level on the mock site produces one digest with exactly those three changes. Checked 2026-10-18 with the real mock server and a local SMTP server: exactly 1 email, 3 changes.
 - [x] Running twice with no changes sends no alert (same check: runs 1 and 3 sent nothing).
 - [x] Email digest arrives and reads clearly on a phone. Sent through Gmail on 2026-10-18; you confirmed it arrived and reads fine on your phone.
-- [ ] Google Sheet "Latest" tab matches the database. Matches in tests against a fake sheet; needs real Google (**waiting on service account setup**).
+- [x] Google Sheet "Latest" tab matches the database. Checked 2026-10-18 by reading the real sheet back through the API: 4 rows, 0 mismatches on every field; headers frozen; prices are number cells.
 - [ ] GitHub Actions run succeeds on schedule and on manual trigger (session 5).
 - [ ] A fresh clone plus the README gets a stranger running in under 15 minutes (session 5).
 - [ ] No secrets in the repository history (scanned each session so far; final check in session 5).
@@ -114,10 +114,13 @@ Session 4 is done. Session 5 needs a plan and your approval:
      root certificates); fixed in code. **Real send succeeded 2026-10-18 09:48 UTC** through
      Gmail to yahanihwgm@gmail.com (run `20261018T094757Z-b46489`, 3 changes); the next
      run with no changes sent nothing. You confirmed it reads fine on your phone.
-  2. Google service account setup for Sheets: **next**. This unblocks "Sheet matches the
-     database".
-- **Decided 2026-10-18:** email only for the demo digest (Slack built, off); Sheets built,
-  not yet tested against real Google.
+  2. ✅ Google service account setup for Sheets: **done**. The key is in
+     `~/.config/price-tracker/` (outside the repo, mode 600), its path is in `.env`, and the
+     sheet is shared with the service account. The real export worked first time.
+- **Decided 2026-10-18:** email only for the demo digest (Slack built, off). Sheets is now
+  tested for real.
+- **Small open item:** whole prices show as `24` instead of `24.00` in the sheet (number cells
+  with no number format). Can be fixed by formatting the price columns as `0.00`.
 - **`REVIEW.md`:** an untracked file in the repo root that wasn't written in these sessions.
   It's left alone and uncommitted (last changed 12:13, reviewing `b3ceeb1`).
 - **Needed for session 5:**
