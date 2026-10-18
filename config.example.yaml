@@ -1,0 +1,31 @@
+# Copy to config.yaml and edit. Secrets go in environment variables, never here.
+
+sites:
+  - name: books-sandbox
+    base_url: https://books.toscrape.com
+    fetch_mode: http        # or: browser
+    delay_seconds: 5
+    selectors:
+      title: "div.product_main h1"
+      price: "div.product_main p.price_color"
+      stock: "div.product_main p.availability"
+    currency: GBP
+
+products:
+  - site: books-sandbox
+    url: https://books.toscrape.com/catalogue/a-light-in-the-attic_1000/index.html
+    my_sku: BOOK-001
+    my_price: 49.99
+
+alerts:
+  min_change_percent: 1
+  always_send_summary: false
+  email:
+    enabled: true
+    to: [owner@example.com]
+  slack:
+    enabled: false
+
+sheets:
+  enabled: false
+  spreadsheet_id: ""

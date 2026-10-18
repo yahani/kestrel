@@ -1,0 +1,27 @@
+# Secrets
+.env
+*.json.key
+service-account*.json
+
+# Local data
+*.db
+*.sqlite3
+logs/
+config.yaml
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+dist/
+build/
+*.egg-info/
+
+# Editors / OS
+.idea/
+.vscode/
+.DS_Store
