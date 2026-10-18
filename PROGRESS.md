@@ -170,9 +170,9 @@ Approved 2026-10-18. Decisions:
 - [x] `tracker data restore|save`, `tracker ci-config` and `tracker --version` added; the
   scripts are deleted and `daily.yml` uses the commands. Tests first (29 ported, plus
   fetch-failure and version tests). Coverage 100%.
-- [ ] Version from package metadata only; installs cleanly with `uv tool install git+…@tag`.
-- [ ] Release v1.0.0: `pyproject.toml` version and `CHANGELOG.md` (tag and Release only with
-  your OK).
+- [x] The version comes from package metadata only. Installs cleanly with `uv tool install --python 3.12 git+…@<commit>`, from an empty cache and a throwaway tool folder. Every command works outside the repo; only the `tracker` package is installed. `--version` and the User-Agent both say 1.0.0. (Re-check from GitHub once the tag is pushed.)
+- [x] Release v1.0.0 prepared: `pyproject.toml` set to 1.0.0, and `CHANGELOG.md` written.
+  - [ ] Tag `v1.0.0` and its GitHub Release: waiting for your OK.
 - [ ] Template repo at `../price-tracker-client-template`: config, workflows, guards,
   `CLIENT_SETUP.md`.
 - [ ] Push this repo and the tag (your OK) → create the private template repo (your OK) →
