@@ -95,10 +95,12 @@ Session 5, **approved 2026-10-18** with these decisions: **public** repo `yahani
   - Each line has `ts`, `level`, `logger`, `msg` and fields.
   - Every HTTP request, each change, and a `run_finished` record with counts and delivery results.
   - A dry run writes no log.
-- Weekly dependency update check (spec, "Security").
+- ✅ Weekly dependency update check (spec, "Security"): `.github/dependabot.yml` covers uv
+  packages (minor and patch updates grouped) and GitHub Actions, on Mondays.
 - ✅ 20-product books sandbox check (`demo/books-sandbox.yaml`, also the scheduled demo).
 - Final README pass and setup guide (the 15-minute fresh-clone check), demo script.
-- Final secrets scan of the whole history.
+- ✅ Secrets scan in CI: a `secrets` job runs gitleaks over the full history on every push and PR.
+- Final secrets scan of the whole history (before handover).
 - ✅ **Fixed (REVIEW.md must-fix 1):** a failed digest send no longer loses the alert.
   Tests written first: 7 of the 9 new end-to-end tests fail on the previous commit.
   Checked by hand: the real mock shop with a local SMTP server stopped, then restarted. The
