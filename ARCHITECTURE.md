@@ -156,8 +156,13 @@ flowchart LR
   did match is kept, which helps with debugging. **Missing stock** → `unknown`, not an error.
 - **Prices:** if both `,` and `.` appear, the last one is the decimal separator. A single
   separator followed by exactly three digits is a thousands separator (`1,299` and `1.299`
-  both become 1299). A space joins digit groups only before exactly three digits. When text
-  has several numbers (`From $9`, ranges, `Was $24 Now $19`) the lowest is taken.
+  both become 1299). A space joins digit groups only before exactly three digits.
+- **Picking the price when text has several numbers:**
+  1. Drop numbers that aren't prices: percentages (`Save 15%`), multi-buy counts
+     (`2 for $30`, `Buy 2`), ratings and review counts (`4.5 stars`, `128 reviews`),
+     discount amounts (`Save $5`, `$5 off`) and stock counts (`3 left`).
+  2. Prefer numbers next to a currency symbol or code over bare numbers.
+  3. Of what's left, take the lowest (`From $9`, `$19.99 - $24.99`, `Was $24 Now $19`).
 - **Stock:** pre-order/backorder → `unknown`; out-of-stock phrases → `out_of_stock`; a
   quantity (`22 available`, `Only 3 left`) → `in_stock` with qty (0 → `out_of_stock`); other
   in-stock phrases, including an "Add to cart" button → `in_stock`; anything else → `unknown`.

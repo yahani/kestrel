@@ -3,7 +3,7 @@
 Updated after every step. Requirement IDs refer to the spec (F1–F12). How the pieces fit
 together is in [ARCHITECTURE.md](ARCHITECTURE.md).
 
-_Last updated: 2026-10-18, end of session 2._
+_Last updated: 2026-10-18, session 3 in progress._
 
 ## 1. Done, by requirement
 
@@ -12,7 +12,7 @@ _Last updated: 2026-10-18, end of session 2._
 | F1 | Load config | ✅ done | `config.py` | Pydantic validation, one readable line per bad field, rejects secret-looking keys, checks CSS selectors compile, product host must match its site. `fetch.contact` + `timeout_seconds` added in session 2. |
 | F2 | Fetch pages | ✅ done | `fetch.py` | httpx, timeout, 3 retries with 1/2/4 s backoff on top of the ≥5 s per-site delay, `Retry-After` honoured (cap 60 s). Optional Playwright browser mode (tested with a fake browser only). |
 | F3 | Respect robots.txt | ✅ done | `fetch.py` | Fetched once per site per run; `Crawl-delay` honoured; 401/403 → disallow; 5xx/unreachable → skip site. |
-| F4 | Parse | ✅ done | `parse.py` | Title, price (Decimal + currency), stock status + qty via config selectors. 23 price formats, 22 stock phrases tested. |
+| F4 | Parse | ✅ done | `parse.py` | Title, price (Decimal + currency), stock status + qty via config selectors. 36 price formats, 22 stock phrases tested. **Fixed in session 3:** price no longer picks up percentages, multi-buy counts, ratings or discount amounts; numbers next to a currency mark are preferred. |
 | F5 | Store | ⏳ session 3 | — | |
 | F6 | Detect changes | ⏳ session 3 | — | |
 | F7 | Compare with own price | ⏳ session 3 | — | |
@@ -28,18 +28,19 @@ _Last updated: 2026-10-18, end of session 2._
 |---|---|---|---|
 | 1 | Skeleton, F1, F11 shell, CI | ✅ | `89af1d0` … `196327b` |
 | 2 | F2, F3, F4, `test-selectors`, fixtures, ARCHITECTURE.md | ✅ | `1e5fdc8` … `ec49626` |
+| 3 | F4 price fix; F5, F6, F7, `history`, mock site | 🔄 in progress | |
 
 ## 2. Test results
 
-Run on 2026-10-18 with `uv run pytest --cov=tracker`:
+Run on 2026-10-18 with `uv run pytest --cov=tracker` (after the price fix):
 
 | Suite | Tests | Result |
 |---|---|---|
 | `test_config.py` | 36 | ✅ pass |
 | `test_fetch.py` | 32 | ✅ pass |
-| `test_parse.py` | 69 | ✅ pass |
+| `test_parse.py` | 83 | ✅ pass |
 | `test_cli.py` | 16 | ✅ pass |
-| **Total** | **153** | **✅ all pass, 1.6 s** |
+| **Total** | **167** | **✅ all pass** |
 
 Coverage: 100% on `config.py`, `fetch.py`, `parse.py` and `cli.py` (spec target is 80%; the
 Playwright loader is excluded because it needs a real browser). `ruff check` and
@@ -60,7 +61,9 @@ Tests make no network calls: real HTTP is blocked in `tests/conftest.py`.
 
 ## 3. Next
 
-Session 3, waiting for plan approval:
+Session 3 (approved), in this order:
+
+- ✅ **F4 fix:** price picks the right number in promo text.
 
 - **F5** SQLite store: `products` and append-only `observations` tables, prices as Decimal.
 - **F6** Change detection against the last successful observation, with the configurable threshold.
@@ -70,7 +73,6 @@ Session 3, waiting for plan approval:
 
 ## 4. Blocked or waiting on you
 
-- **Waiting:** approval of the session 3 plan (not written yet).
 - **Waiting:** your review of the session 2 points: price/stock edge cases in `tests/test_parse.py`, the politeness rules in `fetch.py`, and a live `test-selectors` run.
 - **Not blocking yet:** no GitHub remote, so CI has only run locally. Needed by session 5 (F10); `gh` isn't installed.
 - **Open questions from the spec** (needed by sessions 4–5): GitHub Actions or a paid host, email only or Slack too for the demo, and whether to publish the mock site.

@@ -48,6 +48,21 @@ _ISO_PATTERN = re.compile(r"\b([A-Z]{3})\b")
 # digits follow, so "1 299,00" is one number but "19.99 24.99" is two.
 _NUMBER_PATTERN = re.compile(r"\d(?:[\d.,'\u2019]|[ \u00a0\u202f](?=\d{3}(?!\d)))*")
 
+# Any currency marker, including ambiguous ones that detect_currency can't map to one code.
+_CURRENCY_MARK = "|".join(
+    [re.escape(symbol) for symbol, _ in _SYMBOLS]
+    + [r"\bRs\.?", r"\bkr\b", *(rf"\b{code}\b" for code in sorted(_ISO_CODES))]
+)
+_CURRENCY_BEFORE = re.compile(rf"(?:{_CURRENCY_MARK})\s*$")
+_CURRENCY_AFTER = re.compile(rf"^\s*(?:{_CURRENCY_MARK})")
+# Numbers that are not the price: "15%", "2 for $30", "4.5 stars", "$5 off", "3 left".
+_NOT_PRICE_AFTER = re.compile(
+    r"^\s*(?:%|for\b|x\b|stars?\b|reviews?\b|ratings?\b|off\b|left\b|in stock\b|available\b)",
+    re.IGNORECASE,
+)
+# Discount amounts and multi-buy counts: "Save $5", "You save 10", "Buy 2", "Get 1 free".
+_NOT_PRICE_BEFORE = re.compile(r"\b(?:save|saving|buy|get)\s+(?:\S{1,4}\s*)?$", re.IGNORECASE)
+
 _UNKNOWN_STOCK = re.compile(r"pre-?order|back-?order|coming soon|notify me")
 _OUT_OF_STOCK = re.compile(
     r"out of stock|sold out|unavailable|not available|no longer available|not in stock"
@@ -112,15 +127,30 @@ def detect_currency(text: str) -> str | None:
 def normalise_price(text: str | None) -> tuple[Decimal | None, str | None]:
     """Turn price text into (amount, ISO currency or None).
 
-    When the text holds several numbers ("From $9", "$19.99 - $24.99", "Was $24 Now $19")
-    the lowest one is returned.
+    Numbers that are clearly not the price are ignored: percentages ("Save 15%"), multi-buy
+    counts ("2 for $30"), ratings ("4.5 stars") and discount amounts ("Save $5"). Numbers next
+    to a currency symbol or code are preferred over bare ones. If several candidates remain
+    ("From $9", "$19.99 - $24.99", "Was $24 Now $19"), the lowest is returned.
     """
     if not text or not text.strip():
         return None, None
-    amounts = [d for t in _NUMBER_PATTERN.findall(text) if (d := _to_decimal(t)) is not None]
-    if not amounts:
-        return None, detect_currency(text)
-    return min(amounts), detect_currency(text)
+
+    marked: list[Decimal] = []
+    bare: list[Decimal] = []
+    for match in _NUMBER_PATTERN.finditer(text):
+        before, after = text[: match.start()], text[match.end() :]
+        if _NOT_PRICE_AFTER.match(after) or _NOT_PRICE_BEFORE.search(before):
+            continue
+        amount = _to_decimal(match.group())
+        if amount is None:
+            continue
+        if _CURRENCY_BEFORE.search(before) or _CURRENCY_AFTER.match(after):
+            marked.append(amount)
+        else:
+            bare.append(amount)
+
+    candidates = marked or bare
+    return (min(candidates) if candidates else None), detect_currency(text)
 
 
 def normalise_stock(text: str | None) -> tuple[StockStatus, int | None]:

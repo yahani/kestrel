@@ -192,3 +192,33 @@ def test_raw_text_is_recorded_for_each_selector():
 
 def test_garbled_number_is_not_a_price():
     assert normalise_price("1,2.3,4") == (None, None)
+
+
+@pytest.mark.parametrize(
+    ("text", "amount", "currency"),
+    [
+        ("$49.99 Save 15%", "49.99", None),
+        ("2 for $30", "30", None),
+        ("$19.99 (4.5 stars)", "19.99", None),
+        ("Save $5 - Now $45", "45", None),
+        ("$5 off, now $45", "45", None),
+        ("Save 15% \u2013 £42.49", "42.49", "GBP"),
+        ("4.5 stars $19.99", "19.99", None),
+        ("Buy 2 get 1 free: $10", "10", None),
+        ("You save 3.00 \u2022 9.99 EUR", "9.99", "EUR"),
+        ("Only 3 left at $12", "12", None),
+        ("3 x $4.50", "4.50", None),
+        ("29.99 (128 reviews)", "29.99", None),
+    ],
+)
+def test_normalise_price_ignores_non_price_numbers(text, amount, currency):
+    assert normalise_price(text) == (Decimal(amount), currency)
+
+
+def test_normalise_price_prefers_numbers_next_to_currency():
+    # "12" is bare, "$15" is marked: the marked one wins even though it is larger.
+    assert normalise_price("Pack of 12 - $15") == (Decimal("15"), None)
+
+
+def test_normalise_price_only_percentages_is_no_price():
+    assert normalise_price("Save 15%") == (None, None)
