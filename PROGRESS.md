@@ -151,8 +151,7 @@ All five build sessions are done. What's left:
   the scheduled books run doesn't write to it. Add `GOOGLE_SERVICE_ACCOUNT_KEY` and
   `SHEETS_SPREADSHEET_ID` secrets (pointing at a separate sheet) to turn it on.
 - **`REVIEW.md`:** written by your reviewer and gitignored. The session 4 review was acted
-  on (`5aac81e`, `1c71b97`). A `/loop` (job `f6f48c88`) checks for a new review every 30
-  minutes while this session is open.
+  on (`5aac81e`, `1c71b97`). The 30-minute `/loop` that checked for new reviews was stopped on 2026-10-18 at your request.
 
 ## 5. Client template
 
