@@ -14,8 +14,8 @@ _Last updated: 2026-10-18, session 3 in progress._
 | F3 | Respect robots.txt | ✅ done | `fetch.py` | Fetched once per site per run; `Crawl-delay` honoured; 401/403 → disallow; 5xx/unreachable → skip site. |
 | F4 | Parse | ✅ done | `parse.py` | Title, price (Decimal + currency), stock status + qty via config selectors. 36 price formats, 22 stock phrases tested. **Fixed in session 3:** price no longer picks up percentages, multi-buy counts, ratings or discount amounts; numbers next to a currency mark are preferred. |
 | F5 | Store | ✅ done | `store.py` | `products` + append-only `observations` (UPDATE/DELETE blocked by triggers), prices stored as TEXT Decimals, status values checked by the DB. Products removed from config are marked inactive, history kept. `database:` path added to config. In-memory scratch copy for `--dry-run`. |
-| F6 | Detect changes | ⏳ session 3 | — | |
-| F7 | Compare with own price | ⏳ session 3 | — | |
+| F6 | Detect changes | ✅ done | `changes.py` | Compared with the last *successful* observation: price up/down with signed % (threshold inclusive, default 1%), out of stock, back in stock, title change, currency change, new failure (repeat failures left to F12). First observation → no changes. |
+| F7 | Compare with own price | ✅ done | `changes.py` | Price changes carry an `undercut` flag when the new price is below `my_price`. A separate `undercut` change fires only when a move under the threshold crosses below `my_price`, so one event is never reported twice. |
 | F8 | Alert | ⏳ session 4 | — | |
 | F9 | Export to Sheets | ⏳ session 4 | — | |
 | F10 | Schedule | ⏳ session 5 | — | CI workflow (lint + tests) exists; the daily cron workflow doesn't yet. |
@@ -32,7 +32,7 @@ _Last updated: 2026-10-18, session 3 in progress._
 
 ## 2. Test results
 
-Run on 2026-10-18 with `uv run pytest --cov=tracker` (after F5):
+Run on 2026-10-18 with `uv run pytest --cov=tracker` (after F6, F7):
 
 | Suite | Tests | Result |
 |---|---|---|
@@ -41,7 +41,8 @@ Run on 2026-10-18 with `uv run pytest --cov=tracker` (after F5):
 | `test_parse.py` | 83 | ✅ pass |
 | `test_cli.py` | 16 | ✅ pass |
 | `test_store.py` | 15 | ✅ pass |
-| **Total** | **182** | **✅ all pass** |
+| `test_changes.py` | 28 | ✅ pass |
+| **Total** | **210** | **✅ all pass** |
 
 Coverage: 100% on `config.py`, `fetch.py`, `parse.py` and `cli.py` (spec target is 80%; the
 Playwright loader is excluded because it needs a real browser). `ruff check` and
@@ -54,7 +55,7 @@ Tests make no network calls: real HTTP is blocked in `tests/conftest.py`.
 - [x] Price normalisation handles at least 10 formats
 - [x] Stock normalisation handles in stock, out of stock, quantity text and unknown
 - [x] Parsing works on saved fixtures from each demo site (books.toscrape.com, web-scraping.dev; mock site in session 3)
-- [ ] Change detection cases (session 3)
+- [x] Change detection: up, down, below-threshold ignored, back in stock, out of stock, undercut, first observation (no alert)
 - [x] Invalid config produces a readable error naming the field
 - [x] A failed fetch is recorded and does not stop other products (fetch level; the run loop arrives in session 4)
 - [x] robots.txt disallow is respected
@@ -67,8 +68,8 @@ Session 3 (approved), in this order:
 - ✅ **F4 fix:** price picks the right number in promo text.
 
 - ✅ **F5** SQLite store.
-- **F6** Change detection against the last successful observation, with the configurable threshold.
-- **F7** Undercut flag when a competitor goes below `my_price`.
+- ✅ **F6** change detection.
+- ✅ **F7** undercut flag.
 - **F11** `tracker history <product>`.
 - Mock competitor site whose prices and stock change on demand, plus its fixtures.
 
