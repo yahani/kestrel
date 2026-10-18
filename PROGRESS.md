@@ -16,7 +16,7 @@ _Last updated: 2026-10-18, session 4 in progress._
 | F5 | Store | ✅ done | `store.py` | `products` + append-only `observations` (UPDATE/DELETE blocked by triggers), prices stored as TEXT Decimals, status values checked by the DB. Products removed from config are marked inactive, history kept. `database:` path added to config. In-memory scratch copy for `--dry-run`. Decimals stored in plain notation (`100`, never `1E+2`). |
 | F6 | Detect changes | ✅ done | `changes.py` | Compared with the last *successful* observation: price up/down with signed % (threshold inclusive, default 1%), out of stock, back in stock, title change, currency change, new failure (repeat failures left to F12). First observation → no changes. Stock is compared with the last observation whose stock was known, so `in → unknown → out` still reports out of stock. |
 | F7 | Compare with own price | ✅ done | `changes.py` | Price changes carry an `undercut` flag when the new price is below `my_price`. A separate `undercut` change fires only when a move under the threshold crosses below `my_price`, so one event is never reported twice. Only flagged when the competitor's currency matches the site currency (`my_price` is assumed to be in it). |
-| F8 | Alert | ⏳ session 4 | — | |
+| F8 | Alert | 🟡 built, not yet in `run` | `alerts.py` | One digest per run as text + HTML email (sections: Undercutting you, Price changes, Stock, Other, Couldn't check, Site health) and a Slack Block Kit payload. Competitor text is escaped. Not sent when nothing changed unless `always_send_summary` (a newly failing site also triggers a send). SMTP via STARTTLS/SSL with secrets from env/`.env`; Slack sender built, off in config. **Not yet sent for real** (no SMTP account yet). |
 | F9 | Export to Sheets | ⏳ session 4 | — | |
 | F10 | Schedule | ⏳ session 5 | — | CI workflow (lint + tests) exists; the daily cron workflow doesn't yet. |
 | F11 | CLI | 🟡 partial | `cli.py`, `pipeline.py` | `check-config`, `test-selectors` (`--html`, `--save`) and `history <url\|sku\|url part> [--limit]` done. `run [--dry-run]` fetches, stores and **prints** changes; alerts, Sheets and the health report hook in during session 4. `--dry-run` works on an in-memory copy, so nothing is written. |
@@ -33,7 +33,7 @@ _Last updated: 2026-10-18, session 4 in progress._
 
 ## 2. Test results
 
-Run on 2026-10-18 with `uv run pytest --cov=tracker` (after F12):
+Run on 2026-10-18 with `uv run pytest --cov=tracker` (after F8):
 
 | Suite | Tests | Result |
 |---|---|---|
@@ -46,7 +46,8 @@ Run on 2026-10-18 with `uv run pytest --cov=tracker` (after F12):
 | `test_mock_site.py` | 18 | ✅ pass |
 | `test_pipeline.py` | 14 | ✅ pass |
 | `test_report.py` | 8 | ✅ pass |
-| **Total** | **279** | **✅ all pass** |
+| `test_alerts.py` | 35 | ✅ pass |
+| **Total** | **314** | **✅ all pass** |
 
 Coverage: 100% on `config.py`, `fetch.py`, `parse.py` and `cli.py` (spec target is 80%; the
 Playwright loader is excluded because it needs a real browser). `ruff check` and
@@ -72,7 +73,7 @@ tested against a fake client but not against real Google.** In this order:
 
 - ✅ Money shown as `$24.00` / `£51.77` / `LKR 4500.00` in change text and `history`.
 - ✅ **F12** run summary + site health (hooked into `run` in the last step).
-- **F8** one email digest per run (text + HTML), Slack sender off by default.
+- ✅ **F8** digest + email/Slack senders (hooked into `run` in the last step).
 - **F9** Sheets export: append observations, refresh "Latest".
 - Hook all three into `tracker run`; `--dry-run` previews the digest without sending.
 
