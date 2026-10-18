@@ -24,7 +24,7 @@ Requires Python 3.12 and [uv](https://docs.astral.sh/uv/getting-started/installa
 ```sh
 git clone https://github.com/yahani/price-tracker.git && cd price-tracker
 uv sync
-uv run pytest -q
+uv run pytest
 ```
 
 ### See it work locally, with no email needed

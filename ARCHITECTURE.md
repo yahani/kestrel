@@ -9,7 +9,7 @@ every build session; parts not built yet are marked **planned**.
 | 2 | Fetching (F2), robots.txt (F3), parsing (F4), `test-selectors` | ✅ done |
 | 3 | Price fix (F4), SQLite store (F5), change detection (F6, F7), `history` + `run` printing changes (F11), mock competitor site | ✅ done |
 | 4 | Email/Slack digest (F8), Sheets export (F9), health report (F12), hooked into `run` | ✅ done (email and Sheets both verified for real) |
-| 5 | GitHub Actions schedule (F10), README, demo | planned |
+| 5 | GitHub Actions schedule (F10), JSON logs, Dependabot, secrets scan, README, demo | ✅ done (first scheduled run due 2026-10-19) |
 
 ## The daily pipeline
 
@@ -362,6 +362,54 @@ and sends nothing.
 scheduled run shows up red. Products that can't be checked don't fail the run; they appear
 in the digest.
 
+## Daily schedule (F10)
+
+`.github/workflows/daily.yml` runs at 06:17 UTC and from the **Run workflow** button, in the
+public repo `yahani/price-tracker`. Every Actions runner starts empty, so the database lives
+on a separate `data` branch between runs:
+
+```mermaid
+flowchart TD
+    trigger(["cron 06:17 UTC<br/>or Run workflow"]) --> checkout[checkout main + uv sync]
+    checkout --> restore{data branch<br/>exists?}
+    restore -- yes --> copy["git show data:tracker.db<br/>→ demo/tracker.db"]
+    restore -- "no (first run)" --> empty[start with empty history]
+    copy & empty --> build["scripts/ci_config.py<br/>email/Sheets on from secrets"]
+    build --> check[tracker check-config]
+    check --> run[tracker run]
+    run --> save["save tracker.db to data<br/>(always, even if run failed)"]
+    run --> logs["upload logs/ artifact<br/>kept 30 days"]
+    save --> done([next run restores it])
+```
+
+- **One run at a time:** `concurrency: daily-run` stops two runs racing to write `data`.
+- **Single-commit `data` branch:** it's rebuilt as one commit and force-pushed each run, so
+  the repo doesn't grow by a database copy a day. The database is append-only, so it already
+  holds every observation.
+- **Saving runs even if the tracker exits 1:** a failed email still records which runs are
+  waiting to be sent, and the next run carries them over.
+- **Secrets are never committed:** `DIGEST_EMAIL_TO`, `SMTP_*`, `SHEETS_SPREADSHEET_ID` and
+  `GOOGLE_SERVICE_ACCOUNT_KEY` are repository secrets. `ci_config.py` reports only on/off
+  and counts. The service-account key is written to the runner's temp folder with mode 600.
+- **What it tracks:** the products in `demo/books-sandbox.yaml`, 20 books on a practice site.
+  Point `CONFIG` at another committed config to track real competitors.
+
+## Logs
+
+`logs.py` writes one JSON object per line to `logs/tracker-YYYY-MM-DD.jsonl`, next to the
+config. Files older than `logs.keep_days` (30) are deleted at the start of each run. Each
+line has `ts`, `level`, `logger` and `msg`, plus extra fields from
+`extra={"fields": {...}}`:
+
+| Record | Fields |
+|---|---|
+| httpx `HTTP Request: GET …` | every request made, as an audit trail of politeness |
+| `tracker.fetch` warnings | retries, blocks, robots skips |
+| `change` | run_id, kind, url, text |
+| `run_finished` | run_id, checked, succeeded, failed, changes, failing_sites, carried, deliveries, seconds |
+
+A dry run writes no log, in keeping with "no writes".
+
 ## Mock competitor shop
 
 `mock_site/` is a stdlib HTTP server for demos and end-to-end checks. Its state is a JSON file
@@ -425,8 +473,12 @@ flowchart LR
   `httpx.MockTransport`, through fetch, parse, store and change detection.
 - Fixtures were saved once from the practice sites (see `tests/fixtures/README.md`), plus two
   synthetic variants for out-of-stock and a changed layout.
-- CI (`.github/workflows/ci.yml`) runs ruff lint + format check, `check-config` on the
-  example, and pytest with an 80% coverage gate.
+- CI (`.github/workflows/ci.yml`) has two jobs:
+  - **test:** ruff lint and format check, `check-config` on the example, and pytest with an
+    80% coverage gate.
+  - **secrets:** gitleaks over the full history.
+- Dependabot (`.github/dependabot.yml`) opens weekly PRs for uv packages and GitHub Actions,
+  and CI checks each one.
 
 ## Decisions
 
@@ -453,3 +505,6 @@ flowchart LR
 | Carry undelivered digest items, per channel, in append-only tables | A failed send must not lose an alert, and history stays immutable |
 | Site-health advice depends on the failure type | "Selectors changed" is wrong advice when the site is blocking us |
 | SMTP TLS trusts the system store plus certifi | python.org's macOS Python has no root certificates until a manual step |
+| History on a `data` branch, force-pushed as one commit | Free and permanent (the Actions cache can be evicted); the repo doesn't grow daily |
+| The workflow builds its config from secrets | The recipient and sheet stay out of a public repo |
+| Public repo | Portfolio link; a private repo would also be free at ~2 Actions minutes a day |

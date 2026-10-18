@@ -3,7 +3,7 @@
 Updated after every step. Requirement IDs refer to the spec (F1–F12). How the pieces fit
 together is in [ARCHITECTURE.md](ARCHITECTURE.md).
 
-_Last updated: 2026-10-18, session 5 in progress._
+_Last updated: 2026-10-18, end of session 5. All 12 requirements are built; one acceptance check waits on tomorrow's scheduled run._
 
 ## 1. Done, by requirement
 
@@ -30,7 +30,7 @@ _Last updated: 2026-10-18, session 5 in progress._
 | 2 | F2, F3, F4, `test-selectors`, fixtures, ARCHITECTURE.md | ✅ | `1e5fdc8` … `ec49626` |
 | 3 | F4 price fix; F5, F6, F7, `history`, `run` (prints), mock site | ✅ | `1a3d1c6` … `fc46101` |
 | 4 | F8 (email; Slack off), F9, F12, hooked into `run`; review fixes | ✅ | `50e735a` … `4d990ca` |
-| 5 | F10 schedule, logs, Dependabot, secrets scan, handover | 🔄 in progress | |
+| 5 | F10 schedule, logs, Dependabot, secrets scan, handover | ✅ (scheduled run to confirm) | `d74ff31` … this commit |
 
 ## 2. Test results
 
@@ -80,76 +80,46 @@ Tests make no network calls: real HTTP is blocked in `tests/conftest.py`.
 - [x] Email digest arrives and reads clearly on a phone. Sent through Gmail on 2026-10-18; you confirmed it arrived and reads fine on your phone.
 - [x] Google Sheet "Latest" tab matches the database. Checked 2026-10-18 by reading the real sheet back through the API: 4 rows, 0 mismatches on every field; headers frozen; prices are number cells.
 - [ ] GitHub Actions run succeeds on schedule and on manual trigger. **Manual: ✅** (2 runs on 2026-10-18, with history restored between them). **Scheduled: waiting** for the first cron run, 2026-10-19 06:17 UTC; GitHub can delay scheduled runs by some minutes.
-- [ ] A fresh clone plus the README gets a stranger running in under 15 minutes (session 5).
-- [ ] No secrets in the repository history (scanned each session so far; final check in session 5).
+- [x] A fresh clone plus the README gets a stranger running in under 15 minutes. Checked 2026-10-18: cloned from GitHub into an empty folder with an **empty uv cache** and followed only the README quick start. Clone and install took 25 s, the tests 10 s, and the mock-shop demo with a dry-run digest preview 43 s: **78 s of commands** in total, and the clone stayed clean. (Assumes Python 3.12 and uv are installed; installing uv takes about a minute.)
+- [x] No secrets in the repository history. Final gitleaks scan on 2026-10-18 of all 44 commits on `main` and `data`: no leaks. The public `data` branch database contains no secret-looking strings. CI repeats the full-history scan on every push.
 
 ## 3. Next
 
-Session 5, **approved 2026-10-18** with these decisions: **public** repo `yahani/price-tracker`, history on a **`data` branch**, gitleaks installed with Homebrew. Steps:
+All five build sessions are done. What's left:
 
-- ✅ **F10** GitHub Actions daily cron + manual trigger, with secrets from repository secrets (scheduled run still to confirm).
-  Needs a decision on where the SQLite history lives between runs (Actions runners start
-  empty).
-- ✅ Structured JSON-lines logs (spec, "Reliability"), in `logs.py`:
-  - One `logs/tracker-YYYY-MM-DD.jsonl` file per day, deleted after `logs.keep_days` (30).
-  - Each line has `ts`, `level`, `logger`, `msg` and fields.
-  - Every HTTP request, each change, and a `run_finished` record with counts and delivery results.
-  - A dry run writes no log.
-- ✅ Weekly dependency update check (spec, "Security"): `.github/dependabot.yml` covers uv
-  packages (minor and patch updates grouped) and GitHub Actions, on Mondays.
-- ✅ 20-product books sandbox check (`demo/books-sandbox.yaml`, also the scheduled demo).
-- ✅ Final README with a digest screenshot (`docs/digest.png`), a setup guide
-  (`docs/SETUP.md`: Gmail, Sheets, Slack, Actions secrets) and a 2-minute demo script
-  (`docs/DEMO.md`).
-- The 15-minute fresh-clone check (next).
-- ✅ Secrets scan in CI: a `secrets` job runs gitleaks over the full history on every push and PR.
-- Final secrets scan of the whole history (before handover).
-- ✅ **Fixed (REVIEW.md must-fix 1):** a failed digest send no longer loses the alert.
-  Tests written first: 7 of the 9 new end-to-end tests fail on the previous commit.
-  Checked by hand: the real mock shop with a local SMTP server stopped, then restarted. The
-  failed run exited 1; the next run sent 1 email with the undercut under "From earlier runs
-  that couldn't be sent", dated 10:13 UTC; the run after that sent nothing.
-- ✅ **REVIEW.md should-fix items:**
-  - Site-health advice now depends on the failure type.
-  - `history` shows `my price $23.00`, not `23.0`.
-  - `REVIEW.md` is in `.gitignore`.
-  - The float note is now in ARCHITECTURE.md.
-  - ✅ Session 5: "Latest" is now written first and then trimmed, so a failed write keeps
-    the last good data. The open-ended clear range was checked against the real Sheets API.
+- **Confirm the first scheduled run** (due 2026-10-19 06:17 UTC; GitHub can run scheduled
+  jobs a few minutes late). Then tick the last acceptance box.
+- **Portfolio deliverables from the spec** (yours to make; the repo has what you need):
+  - 2-minute demo video: follow `docs/DEMO.md`.
+  - One-page case study: problem, what it does, about 2 hours a week saved for 50
+    products, and the setup price.
+  - Productized listing text for Upwork Project Catalog or Fiverr.
+- **Later, when a client asks** (v1 "out of scope" in the spec): visual rule builder,
+  logins, SMS/WhatsApp, dashboards, and so on.
 
-**By hand, session 4** (2026-10-18, real mock server + local SMTP server, real `smtplib`):
-- Run 1: 4 ok, no email.
-- Then blue-mug went to 19.50, green-teapot to 49.50 and red-mug to stock 0. Run 2 sent
-  **1 email**: "3 changes, 1 undercut", with sections Undercutting you, Price changes and
-  Stock.
-- Run 3: no email.
-- The HTML part reads clearly at phone width (390 px).
+**Session 5 summary:**
+- **F10:** daily Actions run with history on `data`. Two manual runs passed, and history
+  was restored between them.
+- **Logs:** JSON-lines, 30 days.
+- **Security:** Dependabot weekly; gitleaks in CI.
+- **Sheets:** "Latest" is now written before it's trimmed.
+- **Handover:** the 20-product books check (20/20 match the catalogue); final README, setup
+  guide and demo script; the fresh-clone check (78 s); the final secrets scan (clean).
 
 ## 4. Blocked or waiting on you
 
-- **Waiting:** your review of session 4 (see the list in the session report).
-- **Walkthroughs you asked for:**
-  1. ✅ SMTP setup for the email digest: **done**. `.env` has all five `SMTP_*` values,
-     and `check-config` finds them. The gitignored `mock_site/demo-email.yaml` sends to your
-     Gmail. The first real send failed with `CERTIFICATE_VERIFY_FAILED` (this Python had no
-     root certificates); fixed in code. **Real send succeeded 2026-10-18 09:48 UTC** through
-     Gmail to yahanihwgm@gmail.com (run `20261018T094757Z-b46489`, 3 changes); the next
-     run with no changes sent nothing. You confirmed it reads fine on your phone.
-  2. ✅ Google service account setup for Sheets: **done**. The key is in
-     `~/.config/price-tracker/` (outside the repo, mode 600), its path is in `.env`, and the
-     sheet is shared with the service account. The real export worked first time.
-- **Decided 2026-10-18:** email only for the demo digest (Slack built, off). Sheets is now
-  tested for real.
-- ✅ **Fixed:** sheet prices now show as `24.00`, not `24`. Checked on the real sheet;
-  a second real run also appended to Observations (8 rows), and nothing was overwritten.
-- **`REVIEW.md`:** written by your reviewer and now gitignored. Its session 4 review
-  (`fe7f693`, CHANGES NEEDED) has been acted on: must-fix 1 in `5aac81e`, should-fix items in
-  `1c71b97`. A `/loop` checks it every 30 minutes for a new review.
-- ✅ **GitHub:** https://github.com/yahani/price-tracker (public) is pushed. Before the push,
-  gitleaks scanned all 35 commits: no leaks. Nothing secret was ever tracked. The first CI
-  run on GitHub passed (run 39119445037).
-- **Decided 2026-10-18 (session 5):**
-  - GitHub Actions, in a **public** repo `yahani/price-tracker` (a private repo would also be free at this volume).
-  - History kept on a `data` branch.
-  - The mock site is **not** published in v1.
-  - `gh` installed and logged in as `yahani` with the `workflow` scope, and git uses it for credentials.
+- **Waiting on GitHub:** the first scheduled Daily run, 2026-10-19 06:17 UTC.
+- **Waiting on you:** a review of session 5 (see the session report), and the portfolio
+  deliverables above.
+- **Your accounts, all set up 2026-10-18:**
+  - Gmail app password in `.env`.
+  - Google service account key in `~/.config/price-tracker/`.
+  - Repository secrets `SMTP_*` and `DIGEST_EMAIL_TO`.
+  - `gh` logged in as `yahani`.
+  - Revoke any of these from the same pages if needed (see `docs/SETUP.md`).
+- **Not on Actions yet, by choice:** Sheets export. Your demo sheet holds mock-shop data, so
+  the scheduled books run doesn't write to it. Add `GOOGLE_SERVICE_ACCOUNT_KEY` and
+  `SHEETS_SPREADSHEET_ID` secrets (pointing at a separate sheet) to turn it on.
+- **`REVIEW.md`:** written by your reviewer and gitignored. The session 4 review was acted
+  on (`5aac81e`, `1c71b97`). A `/loop` (job `f6f48c88`) checks for a new review every 30
+  minutes while this session is open.
