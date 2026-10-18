@@ -1,9 +1,11 @@
 import re
 import smtplib
 import sqlite3
+import ssl
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 
+import certifi
 import httpx
 import pytest
 
@@ -394,6 +396,7 @@ class FakeConnection:
 
     def starttls(self, context):
         self.tls = True
+        self.kwargs["context"] = context
 
 
 @pytest.mark.parametrize(
@@ -408,3 +411,18 @@ def test_connect_uses_the_right_transport(monkeypatch, security, cls, tls):
     assert type(conn).__name__ == ("FakeConnection" if cls == "SMTP" else "FakeSSL")
     assert conn.args[:2] == ("smtp.example.com", 587)
     assert conn.tls is tls
+
+
+@pytest.mark.parametrize("security", ["starttls", "ssl"])
+def test_tls_trusts_certifi_even_without_system_certificates(monkeypatch, security):
+    """python.org's macOS Python ships with no root certificates until 'Install Certificates'
+    is run, so a default SSL context can't verify smtp.gmail.com. Certifi's bundle fixes that."""
+    monkeypatch.setattr(smtplib, "SMTP", FakeConnection)
+    monkeypatch.setattr(smtplib, "SMTP_SSL", type("FakeSSL", (FakeConnection,), {}))
+    conn = connect_smtp(smtp_settings({**ENV, "SMTP_SECURITY": security}))
+
+    context = conn.kwargs["context"]
+    assert context.verify_mode == ssl.CERT_REQUIRED
+    assert context.check_hostname is True
+    certifi_count = len(ssl.create_default_context(cafile=certifi.where()).get_ca_certs())
+    assert len(context.get_ca_certs()) >= certifi_count > 100

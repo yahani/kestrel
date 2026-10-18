@@ -387,6 +387,7 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "beautifulsoup4" },
+    { name = "certifi" },
     { name = "gspread" },
     { name = "httpx" },
     { name = "pydantic" },
@@ -411,6 +412,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "beautifulsoup4", specifier = ">=4.15.0" },
+    { name = "certifi", specifier = ">=2026.7.22" },
     { name = "gspread", specifier = ">=6.2.1" },
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "playwright", marker = "extra == 'browser'", specifier = ">=1.64.0" },

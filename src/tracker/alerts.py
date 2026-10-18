@@ -15,6 +15,7 @@ from datetime import date
 from email.message import EmailMessage
 from typing import Literal
 
+import certifi
 import httpx
 
 from tracker.changes import Change
@@ -232,8 +233,19 @@ def missing_secrets(config: Config, env: Mapping[str, str]) -> list[str]:
 SmtpFactory = Callable[[SmtpSettings], smtplib.SMTP]
 
 
-def connect_smtp(settings: SmtpSettings) -> smtplib.SMTP:
+def tls_context() -> ssl.SSLContext:
+    """System trust store plus certifi's bundle, with full verification.
+
+    Some Python installs (python.org's macOS installer before "Install Certificates" is run)
+    have an empty system trust store, so the default context can't verify any SMTP server.
+    """
     context = ssl.create_default_context()
+    context.load_verify_locations(cafile=certifi.where())
+    return context
+
+
+def connect_smtp(settings: SmtpSettings) -> smtplib.SMTP:
+    context = tls_context()
     if settings.security == "ssl":
         return smtplib.SMTP_SSL(
             settings.host, settings.port, timeout=SMTP_TIMEOUT_SECONDS, context=context
