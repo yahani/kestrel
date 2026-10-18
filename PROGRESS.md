@@ -20,7 +20,7 @@ _Last updated: 2026-10-18, session 4 in progress._
 | F9 | Export to Sheets | ⏳ session 4 | — | |
 | F10 | Schedule | ⏳ session 5 | — | CI workflow (lint + tests) exists; the daily cron workflow doesn't yet. |
 | F11 | CLI | 🟡 partial | `cli.py`, `pipeline.py` | `check-config`, `test-selectors` (`--html`, `--save`) and `history <url\|sku\|url part> [--limit]` done. `run [--dry-run]` fetches, stores and **prints** changes; alerts, Sheets and the health report hook in during session 4. `--dry-run` works on an in-memory copy, so nothing is written. |
-| F12 | Health report | ⏳ session 4 | — | |
+| F12 | Health report | 🟡 built, not yet in `run` | `report.py` | Summary (checked, ok, failed, changes, seconds). A site is failing in a run when **all** its products fail; at 2 runs in a row → "selectors may have changed" alert, sent **once** (when the streak hits 2), then still listed while it lasts. |
 
 ### Session log
 
@@ -33,7 +33,7 @@ _Last updated: 2026-10-18, session 4 in progress._
 
 ## 2. Test results
 
-Run on 2026-10-18 with `uv run pytest --cov=tracker` (after money formatting):
+Run on 2026-10-18 with `uv run pytest --cov=tracker` (after F12):
 
 | Suite | Tests | Result |
 |---|---|---|
@@ -41,11 +41,12 @@ Run on 2026-10-18 with `uv run pytest --cov=tracker` (after money formatting):
 | `test_fetch.py` | 32 | ✅ pass |
 | `test_parse.py` | 85 | ✅ pass |
 | `test_cli.py` | 26 | ✅ pass |
-| `test_store.py` | 19 | ✅ pass |
+| `test_store.py` | 21 | ✅ pass |
 | `test_changes.py` | 39 | ✅ pass |
 | `test_mock_site.py` | 18 | ✅ pass |
 | `test_pipeline.py` | 14 | ✅ pass |
-| **Total** | **269** | **✅ all pass** |
+| `test_report.py` | 8 | ✅ pass |
+| **Total** | **279** | **✅ all pass** |
 
 Coverage: 100% on `config.py`, `fetch.py`, `parse.py` and `cli.py` (spec target is 80%; the
 Playwright loader is excluded because it needs a real browser). `ruff check` and
@@ -70,7 +71,7 @@ Session 4, approved: **email digest only, Slack built but switched off, Sheets b
 tested against a fake client but not against real Google.** In this order:
 
 - ✅ Money shown as `$24.00` / `£51.77` / `LKR 4500.00` in change text and `history`.
-- **F12** run summary + "selectors may have changed" alert after 2 failed runs per site.
+- ✅ **F12** run summary + site health (hooked into `run` in the last step).
 - **F8** one email digest per run (text + HTML), Slack sender off by default.
 - **F9** Sheets export: append observations, refresh "Latest".
 - Hook all three into `tracker run`; `--dry-run` previews the digest without sending.

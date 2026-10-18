@@ -60,6 +60,16 @@ class ProductRow:
 
 
 @dataclass(frozen=True)
+class SiteRun:
+    """How one site did in one run."""
+
+    run_id: str
+    ok: int
+    total: int
+    statuses: tuple[str, ...]  # distinct statuses seen, sorted
+
+
+@dataclass(frozen=True)
 class Observation:
     run_id: str
     fetched_at: str
@@ -240,6 +250,41 @@ class Store:
             (product_id, limit),
         )
         return [self._observation(row) for row in rows]
+
+    def site_runs(self, site: str, limit: int = 100) -> list[SiteRun]:
+        """Per-run results for one site, newest run first."""
+        rows = self.conn.execute(
+            """
+            SELECT o.run_id,
+                   SUM(o.status = 'ok') AS ok,
+                   COUNT(*) AS total,
+                   group_concat(DISTINCT o.status) AS statuses,
+                   MIN(o.id) AS first_id
+            FROM observations o JOIN products p ON p.id = o.product_id
+            WHERE p.site = ?
+            GROUP BY o.run_id
+            ORDER BY first_id DESC
+            LIMIT ?
+            """,
+            (site, limit),
+        )
+        return [
+            SiteRun(r["run_id"], r["ok"], r["total"], tuple(sorted(r["statuses"].split(","))))
+            for r in rows
+        ]
+
+    def latest_observations(self) -> list[tuple[ProductRow, Observation]]:
+        """The newest observation of every active product that has one, in product order."""
+        rows = self.conn.execute(
+            """
+            SELECT o.* FROM observations o
+            JOIN products p ON p.id = o.product_id
+            WHERE p.active = 1
+              AND o.id = (SELECT MAX(id) FROM observations WHERE product_id = p.id)
+            ORDER BY p.id
+            """
+        )
+        return [(self.product(row["product_id"]), self._observation(row)) for row in rows]
 
     @staticmethod
     def _observation(row: sqlite3.Row) -> Observation:

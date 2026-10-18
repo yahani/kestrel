@@ -202,3 +202,30 @@ def test_decimals_are_stored_in_plain_notation(store):
     store.record(product.id, obs(price=Decimal("1E+2")))
     raw = store.conn.execute("SELECT price FROM observations").fetchone()[0]
     assert raw == "100"
+
+
+def test_site_runs_newest_first(store):
+    a, b = store.sync_products(TWO_PRODUCTS)
+    store.record(a.id, obs("r1"))
+    store.record(b.id, obs("r1", status="http_error"))
+    store.record(a.id, obs("r2", status="blocked", error="HTTP 403"))
+    store.record(b.id, obs("r2", status="http_error"))
+
+    [r2, r1] = store.site_runs("books-sandbox")
+    assert (r2.run_id, r2.ok, r2.total, r2.statuses) == ("r2", 0, 2, ("blocked", "http_error"))
+    assert (r1.run_id, r1.ok, r1.total, r1.statuses) == ("r1", 1, 2, ("http_error", "ok"))
+    assert store.site_runs("other-site") == []
+    assert len(store.site_runs("books-sandbox", limit=1)) == 1
+
+
+def test_latest_observations_for_active_products(store):
+    a, b = store.sync_products(TWO_PRODUCTS)
+    store.record(a.id, obs("r1", price=Decimal("1")))
+    store.record(a.id, obs("r2", price=Decimal("2")))
+    store.record(b.id, obs("r1", price=Decimal("3")))
+
+    latest = store.latest_observations()
+    assert [(p.url, o.price) for p, o in latest] == [(URL_A, Decimal("2")), (URL_B, Decimal("3"))]
+
+    store.sync_products(config_with({"site": "books-sandbox", "url": URL_A}))
+    assert [p.url for p, _ in store.latest_observations()] == [URL_A]
