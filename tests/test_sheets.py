@@ -36,6 +36,7 @@ class FakeWorksheet:
         self.frozen_rows = 0
         self.calls: list[str] = []
         self.formats: list[tuple] = []
+        self.fail_update = False
 
     def row_values(self, row):
         return [str(v) for v in self.rows[row - 1]] if len(self.rows) >= row else []
@@ -51,7 +52,16 @@ class FakeWorksheet:
     def update(self, values, range_name=None, raw=True, **kwargs):
         self.calls.append(f"update:{range_name}:raw={raw}")
         assert range_name == "A1"
-        self.rows = [list(v) for v in values]
+        if self.fail_update:
+            raise RuntimeError("quota exceeded")
+        values = [list(v) for v in values]
+        self.rows = values + self.rows[len(values) :]  # overwrites from A1, like Sheets
+
+    def batch_clear(self, ranges):
+        self.calls.append(f"batch_clear:{','.join(ranges)}")
+        [single] = ranges
+        first_row = int(single.split(":")[0][1:])
+        self.rows = self.rows[: first_row - 1]
 
     def freeze(self, rows=None, cols=None):
         self.frozen_rows = rows
@@ -81,7 +91,7 @@ def test_fakes_match_gspread_signatures():
         (
             FakeWorksheet,
             gspread.Worksheet,
-            ["row_values", "append_rows", "clear", "freeze", "format"],
+            ["row_values", "append_rows", "clear", "freeze", "format", "batch_clear"],
         ),
         (FakeSpreadsheet, gspread.Spreadsheet, ["worksheet", "add_worksheet"]),
     ]
@@ -161,7 +171,8 @@ def test_observations_are_appended_and_latest_is_rewritten(two_runs, key_file):
     assert len(history.rows) == 1 + 4 + 4  # one header, two runs
     assert history.rows.count(OBSERVATION_HEADER) == 1
     assert len(latest.rows) == 1 + 4
-    assert latest.calls[-3:] == ["clear", "update:A1:raw=True", "format"]
+    assert latest.calls[-3:] == ["update:A1:raw=True", "batch_clear:A6:M", "format"]
+    assert "clear" not in latest.calls  # never emptied before the new rows are written
     assert [c for c in history.calls if c != "format"] == ["append_rows:RAW"] * 2
 
 
@@ -331,3 +342,25 @@ def test_column_letter():
     assert sheets._column(["a", "b", "price"], "price") == "C"
     many = [f"c{i}" for i in range(30)]
     assert sheets._column(many, "c26") == "AA"
+
+
+def test_latest_keeps_old_rows_if_the_write_fails(two_runs, key_file):
+    store, first, second = two_runs
+    sheet = FakeSpreadsheet()
+    do_export(sheet, store, first, key_file)
+    before = [list(r) for r in sheet.tabs["Latest"].rows]
+
+    sheet.tabs["Latest"].fail_update = True
+    delivery, _ = do_export(sheet, store, second, key_file)
+    assert not delivery.ok
+    assert sheet.tabs["Latest"].rows == before  # still the last good data, not an empty tab
+
+
+def test_latest_trims_rows_left_from_a_longer_list(two_runs, key_file):
+    store, first, _ = two_runs
+    sheet = FakeSpreadsheet(tabs=["Latest"])
+    latest = sheet.tabs["Latest"]
+    latest.rows = [["old"]] * 10  # e.g. products removed from config since
+    do_export(sheet, store, first, key_file)
+    assert len(latest.rows) == 5  # header + 4 products; the 5 stale rows below are trimmed
+    assert ["old"] not in latest.rows

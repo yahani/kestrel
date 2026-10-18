@@ -341,8 +341,8 @@ channel is missing one.
 - This is the **one deliberate exception to "Decimal, never float"**: Sheets stores every
   number as a double anyway, so prices are converted at this output boundary only. The
   database stays exact.
-- **Known limitation:** "Latest" is cleared and then rewritten. If the write fails, the tab
-  stays empty until the next successful run. History is unaffected.
+- "Latest" is overwritten from A1 and only then trimmed below the new last row, so a failed
+  write leaves the last good data in place rather than an empty tab.
 
 **Undelivered digests.** Observations are saved before anything is sent, so a failed send
 would otherwise lose the alert: the next run compares against the new prices and sees

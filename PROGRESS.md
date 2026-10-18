@@ -34,7 +34,7 @@ _Last updated: 2026-10-18, session 5 in progress._
 
 ## 2. Test results
 
-Run on 2026-10-18 with `uv run pytest --cov=tracker` (after the review's should-fix items):
+Run on 2026-10-18 with `uv run pytest --cov=tracker` (session 5, after the Latest fix):
 
 | Suite | Tests | Result |
 |---|---|---|
@@ -48,9 +48,9 @@ Run on 2026-10-18 with `uv run pytest --cov=tracker` (after the review's should-
 | `test_pipeline.py` | 14 | ✅ pass |
 | `test_report.py` | 13 | ✅ pass |
 | `test_alerts.py` | 39 | ✅ pass |
-| `test_sheets.py` | 21 | ✅ pass |
+| `test_sheets.py` | 23 | ✅ pass |
 | `test_carryover.py` | 9 | ✅ pass |
-| **Total** | **379** | **✅ all pass** |
+| **Total** | **381** | **✅ all pass** |
 
 Coverage: 100% on every module in `src/tracker/` (spec target is 80%). Excluded: the
 Playwright loader and `sheets.open_spreadsheet`, which need a real browser or real Google
@@ -102,8 +102,9 @@ Session 5, **approved 2026-10-18** with these decisions: **public** repo `yahani
   - Site-health advice now depends on the failure type.
   - `history` shows `my price $23.00`, not `23.0`.
   - `REVIEW.md` is in `.gitignore`.
-  - Deferred: Latest is cleared before it's rewritten (a failed write leaves it empty until
-    the next run), and the float note is now in ARCHITECTURE.md.
+  - The float note is now in ARCHITECTURE.md.
+  - ✅ Session 5: "Latest" is now written first and then trimmed, so a failed write keeps
+    the last good data. The open-ended clear range was checked against the real Sheets API.
 
 **By hand, session 4** (2026-10-18, real mock server + local SMTP server, real `smtplib`):
 - Run 1: 4 ok, no email.
