@@ -3,7 +3,7 @@
 Updated after every step. Requirement IDs refer to the spec (F1–F12). How the pieces fit
 together is in [ARCHITECTURE.md](ARCHITECTURE.md).
 
-_Last updated: 2026-10-18, end of session 4._
+_Last updated: 2026-10-18, session 5 in progress._
 
 ## 1. Done, by requirement
 
@@ -29,7 +29,8 @@ _Last updated: 2026-10-18, end of session 4._
 | 1 | Skeleton, F1, F11 shell, CI | ✅ | `89af1d0` … `196327b` |
 | 2 | F2, F3, F4, `test-selectors`, fixtures, ARCHITECTURE.md | ✅ | `1e5fdc8` … `ec49626` |
 | 3 | F4 price fix; F5, F6, F7, `history`, `run` (prints), mock site | ✅ | `1a3d1c6` … `fc46101` |
-| 4 | F8 (email; Slack off), F9 (untested live), F12, hooked into `run` | ✅ | `50e735a` … this commit |
+| 4 | F8 (email; Slack off), F9, F12, hooked into `run`; review fixes | ✅ | `50e735a` … `4d990ca` |
+| 5 | F10 schedule, logs, Dependabot, secrets scan, handover | 🔄 in progress | |
 
 ## 2. Test results
 
@@ -82,7 +83,7 @@ Tests make no network calls: real HTTP is blocked in `tests/conftest.py`.
 
 ## 3. Next
 
-Session 4 is done. Session 5 needs a plan and your approval:
+Session 5, **approved 2026-10-18** with these decisions: **public** repo `yahani/price-tracker`, history on a **`data` branch**, gitleaks installed with Homebrew. Steps:
 
 - **F10** GitHub Actions daily cron + manual trigger, with secrets from repository secrets.
   Needs a decision on where the SQLite history lives between runs (Actions runners start
@@ -114,7 +115,6 @@ Session 4 is done. Session 5 needs a plan and your approval:
 
 ## 4. Blocked or waiting on you
 
-- **Waiting:** your approval of the session 5 plan (written 2026-10-18, see the session report) and the 4 decisions it asks for.
 - **Waiting:** your review of session 4 (see the list in the session report).
 - **Walkthroughs you asked for:**
   1. ✅ SMTP setup for the email digest: **done**. `.env` has all five `SMTP_*` values,
@@ -133,7 +133,8 @@ Session 4 is done. Session 5 needs a plan and your approval:
 - **`REVIEW.md`:** written by your reviewer and now gitignored. Its session 4 review
   (`fe7f693`, CHANGES NEEDED) has been acted on: must-fix 1 in `5aac81e`, should-fix items in
   `1c71b97`. A `/loop` checks it every 30 minutes for a new review.
-- **Needed for session 5:**
-  - a GitHub repository (public or private) and a remote; `gh` isn't installed
-  - the spec's open question: GitHub Actions (free, public repo) or a small paid host
-  - whether to publish the mock site
+- **Decided 2026-10-18 (session 5):**
+  - GitHub Actions, in a **public** repo `yahani/price-tracker` (a private repo would also be free at this volume).
+  - History kept on a `data` branch.
+  - The mock site is **not** published in v1.
+  - `gh` installed and logged in as `yahani` with the `workflow` scope, and git uses it for credentials.
