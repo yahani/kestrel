@@ -57,7 +57,9 @@ class Site(_Strict):
     def _iso_currency(cls, value: str) -> str:
         value = value.upper()
         if not re.fullmatch(r"[A-Z]{3}", value):
-            raise ValueError(f"must be a 3-letter ISO currency code like USD or GBP (got {value!r})")
+            raise ValueError(
+                f"must be a 3-letter ISO currency code like USD or GBP (got {value!r})"
+            )
         return value
 
 

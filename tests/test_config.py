@@ -2,8 +2,8 @@ from decimal import Decimal
 
 import pytest
 
-from tracker.config import MAX_PRODUCTS, MAX_SITES, ConfigError, load_config
 from tests.conftest import EXAMPLE_CONFIG
+from tracker.config import MAX_PRODUCTS, MAX_SITES, ConfigError, load_config
 
 
 def error_for(path) -> str:
@@ -135,9 +135,7 @@ def test_www_prefix_is_ignored_for_host_match(example_data, write_config):
 
 def test_duplicate_product_url(example_data, write_config):
     example_data["products"].append(dict(example_data["products"][0]))
-    assert "products[1].url: duplicate of products[0].url" in error_for(
-        write_config(example_data)
-    )
+    assert "products[1].url: duplicate of products[0].url" in error_for(write_config(example_data))
 
 
 def test_duplicate_site_name(example_data, write_config):
