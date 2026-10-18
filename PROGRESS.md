@@ -98,7 +98,10 @@ Session 5, **approved 2026-10-18** with these decisions: **public** repo `yahani
 - ✅ Weekly dependency update check (spec, "Security"): `.github/dependabot.yml` covers uv
   packages (minor and patch updates grouped) and GitHub Actions, on Mondays.
 - ✅ 20-product books sandbox check (`demo/books-sandbox.yaml`, also the scheduled demo).
-- Final README pass and setup guide (the 15-minute fresh-clone check), demo script.
+- ✅ Final README with a digest screenshot (`docs/digest.png`), a setup guide
+  (`docs/SETUP.md`: Gmail, Sheets, Slack, Actions secrets) and a 2-minute demo script
+  (`docs/DEMO.md`).
+- The 15-minute fresh-clone check (next).
 - ✅ Secrets scan in CI: a `secrets` job runs gitleaks over the full history on every push and PR.
 - Final secrets scan of the whole history (before handover).
 - ✅ **Fixed (REVIEW.md must-fix 1):** a failed digest send no longer loses the alert.

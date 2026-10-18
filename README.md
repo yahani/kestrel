@@ -1,98 +1,133 @@
 # Competitor Price and Stock Tracker
 
-Checks a list of competitor product pages once a day, records price and stock,
-and sends one digest when something changes.
+Checks a list of competitor product pages once a day, records price and stock, and sends
+**one digest** when something changes, such as "Rival X cut Blue Mug from $24.00 to $19.50
+and is out of stock on Red Mug". The full history is kept in SQLite and, optionally, in a
+Google Sheet.
 
-> Work in progress: session 4 of 5. Everything runs end to end: fetch, parse, history,
-> change detection, email digest (Slack optional) and Google Sheets export. The daily
-> schedule arrives in session 5. See [ARCHITECTURE.md](ARCHITECTURE.md) for how it fits
-> together and [PROGRESS.md](PROGRESS.md) for status.
+<p align="center"><img src="docs/digest.png" width="360" alt="Example email digest on a phone: an undercut, a price rise and an out-of-stock item"></p>
 
-## Setup
+- **Polite by design.** It obeys robots.txt, waits at least 5 s between requests to a site
+  (longer if robots.txt asks), and sends an honest User-Agent with a contact address. It
+  never logs in or bypasses CAPTCHAs or anti-bot systems.
+- **Reliable.** A broken page is recorded and skipped; it never stops the run. A site that
+  fails two runs in a row gets its own alert. A digest that fails to send is carried into
+  the next one.
+- **Delivered where you work.** Email (any SMTP account), Slack, and a Google Sheet with a
+  "Latest" tab and full history.
+- **Cheap to run.** A free daily GitHub Actions schedule; nothing else to host.
 
-Requires Python 3.12 and [uv](https://docs.astral.sh/uv/).
+## Quick start (about 10 minutes)
+
+Requires Python 3.12 and [uv](https://docs.astral.sh/uv/getting-started/installation/).
 
 ```sh
+git clone https://github.com/yahani/price-tracker.git && cd price-tracker
 uv sync
-cp config.example.yaml config.yaml   # set fetch.contact to your own email
-cp .env.example .env                 # secrets live here, never in config.yaml
+uv run pytest -q
 ```
 
-Only for sites with `fetch_mode: browser` (JavaScript-rendered pages):
+### See it work locally, with no email needed
+
+The repo includes a tiny mock competitor shop whose prices you can change. Run it in one
+terminal:
 
 ```sh
-uv sync --extra browser
-uv run playwright install chromium
+uv run python -m mock_site serve
 ```
 
-## Usage
+In a second terminal:
 
 ```sh
-uv run tracker check-config                      # validate config.yaml
-uv run tracker check-config --config other.yaml
-
-# Fetch one page and show what each selector matched and how it was normalised
-uv run tracker test-selectors https://books.toscrape.com/catalogue/a-light-in-the-attic_1000/index.html
-
-# Same, but from a saved page (no network), or save the fetched page for later
-uv run tracker test-selectors <url> --html saved.html
-uv run tracker test-selectors <url> --save tests/fixtures/new_page.html
-```
-
-```sh
-uv run tracker run                               # check, store, export, send one digest
-uv run tracker run --dry-run                     # same, but only preview the digest
-uv run tracker history BOOK-001                  # by SKU, full URL, or part of the URL
-uv run tracker history a-light-in-the-attic --limit 5
-```
-
-History is kept in SQLite (`database:` in the config, default `tracker.db` next to it).
-
-The tracker is polite by design: it obeys robots.txt, waits at least 5 seconds between
-requests to the same site (longer if robots.txt asks), and identifies itself with a
-User-Agent that includes `fetch.contact`.
-
-## Alerts and Sheets
-
-Turn channels on in `config.yaml` (`alerts.email`, `alerts.slack`, `sheets`) and put the
-secrets in `.env` (see `.env.example`). `uv run tracker check-config` warns about anything
-missing.
-
-- **Email:** any SMTP account. For Gmail, use `smtp.gmail.com`, port 587, and an
-  [app password](https://support.google.com/accounts/answer/185833) (not your normal
-  password).
-- **Slack:** an incoming-webhook URL in `SLACK_WEBHOOK_URL`.
-- **Google Sheets:** a service-account key file in `GOOGLE_SERVICE_ACCOUNT_JSON`, and the
-  spreadsheet shared with the service account's email address.
-
-A digest goes out only when something changed, unless `alerts.always_send_summary` is on.
-`tracker run` exits 1 if an enabled channel fails.
-
-## Demo with the mock competitor shop
-
-A tiny local shop whose prices and stock you change on demand:
-
-```sh
-# terminal 1
-uv run python -m mock_site serve                 # http://127.0.0.1:8000, admin at /admin
-
-# terminal 2
-uv run tracker run -c mock_site/tracker-config.yaml          # first run: no changes
+uv run tracker run -c mock_site/tracker-config.yaml
 uv run python -m mock_site set blue-mug --price 19.50
 uv run python -m mock_site set red-mug --stock 0
-uv run tracker run -c mock_site/tracker-config.yaml          # reports both changes
-uv run tracker run -c mock_site/tracker-config.yaml --dry-run  # shows the digest it would send
-uv run tracker history MUG-BLUE -c mock_site/tracker-config.yaml
-uv run python -m mock_site reset                             # back to starting prices
+uv run tracker run -c mock_site/tracker-config.yaml --dry-run
 ```
+
+The first run records the starting prices. The dry run then lists both changes and prints
+the digest it would send. Run it without `--dry-run` to store them, and use
+`uv run tracker history MUG-BLUE -c mock_site/tracker-config.yaml` to see the history.
+`uv run python -m mock_site reset` puts the prices back.
+
+### Track real competitors
+
+```sh
+cp config.example.yaml config.yaml
+cp .env.example .env
+```
+
+1. In `config.yaml`, set `fetch.contact` to your email address. It goes in the User-Agent so
+   site owners can reach you.
+2. Add a site per competitor, with CSS selectors for title, price and stock, and add the
+   product URLs.
+3. Check the selectors on one page: `uv run tracker test-selectors <product-url>`.
+4. Put secrets in `.env`, never in `config.yaml`. See [docs/SETUP.md](docs/SETUP.md) for
+   Gmail, Slack and Google Sheets.
+5. Run `uv run tracker check-config`, then `uv run tracker run`.
+
+Only track sites whose terms allow automated access: for client work, get that confirmed
+in writing. Don't use it on big marketplaces such as Amazon.
+
+## Commands
+
+| Command | What it does |
+|---|---|
+| `tracker run [--dry-run]` | Check every product, store the results, export to Sheets, send one digest. `--dry-run` previews the digest and saves nothing. Exits 1 if an enabled channel fails to send. |
+| `tracker check-config` | Validate the config and say which secrets are missing for enabled channels. |
+| `tracker test-selectors <url> [--html FILE] [--save FILE]` | Show what each selector matched on one page and how it was read. |
+| `tracker history <sku\|url\|part of url> [--limit N]` | Price and stock history for one product, newest first. |
+
+All commands take `-c/--config` (default `config.yaml`). The database (`tracker.db`) and
+`logs/` sit next to the config file.
+
+## How it decides what to report
+
+- **Price changes:** changes of at least `alerts.min_change_percent` (default 1%), compared
+  with the last *successful* check, so a failed day in between doesn't hide anything.
+- **Stock:** going in or out of stock.
+- **Undercuts:** set `my_price` on a product to be told when a competitor goes below it.
+- **Other:** title and currency changes.
+- **Failures:** products that newly fail to load or parse.
+- **Prices:** read exactly, as Decimals. Text like "From $9", "1.299,00 €" or
+  "$49.99 Save 15%" is handled.
+- **When a digest is sent:** only when something changed, unless
+  `alerts.always_send_summary` is on.
+
+## Run it daily on GitHub Actions
+
+`.github/workflows/daily.yml` runs at 06:17 UTC every day, and from the **Run workflow**
+button. It keeps the database on a `data` branch between runs and uploads the day's JSON
+logs as an artifact. Email and Sheets settings come from repository secrets:
+
+| Secret | For |
+|---|---|
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM` | Email |
+| `DIGEST_EMAIL_TO` | Who gets the digest (comma-separated) |
+| `SHEETS_SPREADSHEET_ID`, `GOOGLE_SERVICE_ACCOUNT_KEY` | Google Sheets (optional; the key is the JSON file's contents) |
+
+The workflow tracks the products in `demo/books-sandbox.yaml`, which are 20 books on a
+practice site. Point `CONFIG` in the workflow at your own config to track real
+competitors. [docs/SETUP.md](docs/SETUP.md) has the commands for setting the secrets.
+
+## Project docs
+
+- [docs/SETUP.md](docs/SETUP.md): Gmail, Google Sheets, Slack and GitHub Actions setup.
+- [docs/DEMO.md](docs/DEMO.md): a 2-minute demo script.
+- [ARCHITECTURE.md](ARCHITECTURE.md): how it fits together, with diagrams.
+- [PROGRESS.md](PROGRESS.md): build status against the spec's requirements.
 
 ## Development
 
 ```sh
 uv run pytest --cov=tracker
-uv run ruff check .
-uv run ruff format .
+uv run ruff check . && uv run ruff format .
 ```
 
-Tests never touch the network: real HTTP is blocked in `tests/conftest.py`, fetch tests use
-`httpx.MockTransport`, and parsing tests use saved pages in `tests/fixtures/`.
+Tests never touch the network: real HTTP is blocked in `tests/conftest.py`, and no test can
+see your real secrets or `.env`. CI runs lint, the tests (coverage at least 80%; currently
+100%) and a gitleaks scan of the full history. Dependabot proposes dependency updates
+weekly.
+
+To track sites that need JavaScript, set `fetch_mode: browser` on the site and install the
+extra: `uv sync --extra browser && uv run playwright install chromium`.
