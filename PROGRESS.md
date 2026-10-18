@@ -3,7 +3,7 @@
 Updated after every step. Requirement IDs refer to the spec (F1–F12). How the pieces fit
 together is in [ARCHITECTURE.md](ARCHITECTURE.md).
 
-_Last updated: 2026-10-18, session 4 in progress._
+_Last updated: 2026-10-18, end of session 4._
 
 ## 1. Done, by requirement
 
@@ -29,7 +29,7 @@ _Last updated: 2026-10-18, session 4 in progress._
 | 1 | Skeleton, F1, F11 shell, CI | ✅ | `89af1d0` … `196327b` |
 | 2 | F2, F3, F4, `test-selectors`, fixtures, ARCHITECTURE.md | ✅ | `1e5fdc8` … `ec49626` |
 | 3 | F4 price fix; F5, F6, F7, `history`, `run` (prints), mock site | ✅ | `1a3d1c6` … `fc46101` |
-| 4 | F8 (email; Slack off), F9 (untested live), F12, hooked into `run` | 🔄 in progress | |
+| 4 | F8 (email; Slack off), F9 (untested live), F12, hooked into `run` | ✅ | `50e735a` … this commit |
 
 ## 2. Test results
 
@@ -57,44 +57,61 @@ credentials. `ruff check` and
 
 Tests make no network calls: real HTTP is blocked in `tests/conftest.py`.
 
-**Spec acceptance criteria (automated) so far**
+**Spec acceptance criteria: automated**
 
-- [x] Price normalisation handles at least 10 formats
+- [x] Price normalisation handles at least 10 formats (36 tested)
 - [x] Stock normalisation handles in stock, out of stock, quantity text and unknown
 - [x] Parsing works on saved fixtures from each demo site (books.toscrape.com, web-scraping.dev, mock shop)
 - [x] Change detection: up, down, below-threshold ignored, back in stock, out of stock, undercut, first observation (no alert)
 - [x] Invalid config produces a readable error naming the field
-- [x] A failed fetch is recorded and does not stop other products (`test_pipeline.py`)
+- [x] A failed fetch is recorded and does not stop other products
 - [x] robots.txt disallow is respected
-- [x] Test coverage ≥ 80% on parse, changes and config (`changes.py` doesn't exist yet)
+- [x] Test coverage ≥ 80% on parse, changes and config (100%)
+
+**Spec acceptance criteria: end to end, by hand**
+
+- [ ] `tracker run` on the books sandbox stores correct title, price and stock for 20 products. Not run yet (the example config has 1 product); planned for session 5.
+- [x] Changing two prices and one stock level on the mock site produces one digest with exactly those three changes. Checked 2026-10-18 with the real mock server and a local SMTP server: exactly 1 email, 3 changes.
+- [x] Running twice with no changes sends no alert (same check: runs 1 and 3 sent nothing).
+- [ ] Email digest arrives and reads clearly on a phone. Rendered at 390 px in a browser and it reads well; needs a real mailbox (**waiting on SMTP setup**).
+- [ ] Google Sheet "Latest" tab matches the database. Matches in tests against a fake sheet; needs real Google (**waiting on service account setup**).
+- [ ] GitHub Actions run succeeds on schedule and on manual trigger (session 5).
+- [ ] A fresh clone plus the README gets a stranger running in under 15 minutes (session 5).
+- [ ] No secrets in the repository history (scanned each session so far; final check in session 5).
 
 ## 3. Next
 
-Session 4, approved: **email digest only, Slack built but switched off, Sheets built and
-tested against a fake client but not against real Google.** In this order:
+Session 4 is done. Session 5 needs a plan and your approval:
 
-- ✅ Money shown as `$24.00` / `£51.77` / `LKR 4500.00` in change text and `history`.
-- ✅ **F12** run summary + site health (hooked into `run` in the last step).
-- ✅ **F8** digest + email/Slack senders (hooked into `run` in the last step).
-- ✅ **F9** Sheets export (hooked into `run` in the last step).
-- ✅ All three hooked into `tracker run`; `--dry-run` previews the digest without sending.
+- **F10** GitHub Actions daily cron + manual trigger, with secrets from repository secrets.
+  Needs a decision on where the SQLite history lives between runs (Actions runners start
+  empty).
+- Structured JSON-lines logs kept for 30 days (spec, "Reliability").
+- Weekly dependency update check (spec, "Security").
+- Final README pass and setup guide (the 15-minute fresh-clone check), demo script, and the
+  20-product books sandbox check.
+- Final secrets scan of the whole history.
 
-**By hand, session 3** (done 2026-10-18 against the real mock server on localhost): run 1
-gave 4 ok and 0 changes. Then blue-mug went to 19.50, green-teapot to 49.50 and red-mug to
-stock 0, and run 2 gave **exactly those 3 changes**. Run 3 gave 0 changes, and `history
-MUG-BLUE` showed all 3 observations. Each run took 20 s (5 s delay × 4 products).
+**By hand, session 4** (2026-10-18, real mock server + local SMTP server, real `smtplib`):
+- Run 1: 4 ok, no email.
+- Then blue-mug went to 19.50, green-teapot to 49.50 and red-mug to stock 0. Run 2 sent
+  **1 email**: "3 changes, 1 undercut", with sections Undercutting you, Price changes and
+  Stock.
+- Run 3: no email.
+- The HTML part reads clearly at phone width (390 px).
 
 ## 4. Blocked or waiting on you
 
-- **Waiting:** your review of session 3 (see the list in the session report).
-- **Decided 2026-10-18:** email only for the demo digest; Sheets built and left untested.
-- **Later, walkthroughs you asked for:** (1) SMTP setup for the email digest, (2) Google
-  service account setup for Sheets. Until then, "email arrives on a phone" and "Sheet matches
-  the database" stay unticked.
-- **`REVIEW.md`:** an untracked file in the repo root that wasn't written in this session.
-  It's left alone and uncommitted. Its 5 "should fix" points were each checked and fixed in
-  `61ff94e`.
-- **Not blocking yet:** no GitHub remote, so CI has only run locally. Needed by session 5
-  (F10); `gh` isn't installed.
-- **Open questions from the spec** (needed by session 5): GitHub Actions or a paid host,
-  and whether to publish the mock site.
+- **Waiting:** approval of the session 5 plan (not written yet).
+- **Waiting:** your review of session 4 (see the list in the session report).
+- **Walkthroughs you asked for:**
+  1. SMTP setup for the email digest. This unblocks "email arrives on a phone".
+  2. Google service account setup for Sheets. This unblocks "Sheet matches the database".
+- **Decided 2026-10-18:** email only for the demo digest (Slack built, off); Sheets built,
+  not yet tested against real Google.
+- **`REVIEW.md`:** an untracked file in the repo root that wasn't written in these sessions.
+  It's left alone and uncommitted (last changed 12:13, reviewing `b3ceeb1`).
+- **Needed for session 5:**
+  - a GitHub repository (public or private) and a remote; `gh` isn't installed
+  - the spec's open question: GitHub Actions (free, public repo) or a small paid host
+  - whether to publish the mock site

@@ -8,14 +8,14 @@ every build session; parts not built yet are marked **planned**.
 | 1 | Repo skeleton, config loading (F1), CLI shell (F11), CI | ✅ done |
 | 2 | Fetching (F2), robots.txt (F3), parsing (F4), `test-selectors` | ✅ done |
 | 3 | Price fix (F4), SQLite store (F5), change detection (F6, F7), `history` + `run` printing changes (F11), mock competitor site | ✅ done |
-| 4 | Email/Slack digest (F8), Sheets export (F9), health report (F12), hooked into `run` | planned |
+| 4 | Email/Slack digest (F8), Sheets export (F9), health report (F12), hooked into `run` | ✅ done (Sheets not yet tested against real Google) |
 | 5 | GitHub Actions schedule (F10), README, demo | planned |
 
 ## The daily pipeline
 
 One command (`tracker run`) runs a straight pipeline. A product that fails at any step is
-recorded and skipped; it never stops the other products. `pipeline.run_once()` drives it;
-today `tracker run` prints the changes, and session 4 sends them as a digest instead.
+recorded and skipped; it never stops the other products. `pipeline.run_once()` collects and
+detects; `cli.run` then builds the report, exports to Sheets and sends the digest.
 
 ```mermaid
 flowchart LR
@@ -24,12 +24,9 @@ flowchart LR
     fetch --> parse["Parse<br/>parse.py ✅"]
     parse --> store[("Store<br/>store.py ✅")]
     store --> detect["Detect changes<br/>changes.py ✅"]
-    detect --> alert["Alert digest<br/>alerts.py · planned"]
-    detect --> sheets["Google Sheet<br/>sheets.py · planned"]
-    detect --> report["Run report<br/>report.py · planned"]
-
-    classDef planned stroke-dasharray: 5 5,color:#888
-    class alert,sheets,report planned
+    detect --> report["Run report<br/>report.py ✅"]
+    report --> alert["Digest: email / Slack<br/>alerts.py ✅"]
+    store --> sheets["Google Sheet<br/>sheets.py ✅ · untested live"]
 ```
 
 ## Modules
@@ -44,6 +41,13 @@ flowchart TD
     pipeline --> store["store.py<br/>Store, ProductRow, Observation"]
     pipeline --> changes["changes.py<br/>detect_changes(), Change"]
     changes --> store
+    cli --> report["report.py<br/>build_report(), SiteHealth"]
+    cli --> alerts["alerts.py<br/>build_digest(), deliver()"]
+    cli --> sheets["sheets.py<br/>export()"]
+    report --> store
+    alerts --> smtp["smtplib"]
+    alerts --> slackhook["Slack webhook<br/>(httpx)"]
+    sheets --> gspread["gspread"]
     fetch --> config
     parse --> config
     store --> sqlite[("SQLite")]
@@ -60,7 +64,10 @@ flowchart TD
 | `store.py` | SQLite: syncs `products` from config, appends `observations`, answers "previous", "previous ok", "previous with known stock" and history queries. | Updates or deletes an observation (triggers forbid it) |
 | `changes.py` | Pure function from (product, current, previous observations) to a list of `Change`s with human-readable `describe()`. | Touches the network or database |
 | `pipeline.py` | One run: sync products, interleave them across sites, fetch → parse → record each, then detect changes for the run. | Lets one product's exception stop the run |
-| `cli.py` | `check-config`, `test-selectors`, `run [--dry-run]` (prints changes), `history`. | Holds business logic |
+| `report.py` | Run summary and site health: a site whose products **all** fail 2 runs in a row is flagged once. | Sends anything |
+| `alerts.py` | Builds one digest per run (text, HTML, Slack blocks) and sends it by SMTP and/or Slack webhook. | Reads secrets from config, or raises on a failed send |
+| `sheets.py` | Appends the run's observations and rewrites the "Latest" tab through a service account. | Lets a competitor's text become a formula (writes RAW) |
+| `cli.py` | `check-config`, `test-selectors`, `run [--dry-run]`, `history`; loads `.env`; wires report → Sheets → digest. | Holds business logic |
 
 ## Config (F1)
 
@@ -142,7 +149,7 @@ flowchart TD
   `Retry-After` on a 429 is honoured, capped at 60 s.
 - Sleep, clock and jitter are injected, so tests run instantly with a fake clock.
 
-**Status values** match the `observations.status` column planned for session 3:
+**Status values** match the `observations.status` column:
 `ok`, `http_error`, `blocked`, `skipped_robots` (and `parse_error`, set by the parser).
 
 **User-Agent:** `price-tracker/<version> (+mailto:<fetch.contact>)`; robots.txt rules are
@@ -248,6 +255,71 @@ flowchart TD
 - **Last good observation:** failed runs in between don't hide a change; `24.00 → (failed) →
   19.50` is still a price drop. Stock skips `unknown` the same way.
 
+## One run, end to end (F8, F9, F12)
+
+```mermaid
+sequenceDiagram
+    participant Cron as cron / you
+    participant CLI as tracker run
+    participant P as pipeline
+    participant DB as SQLite
+    participant R as report
+    participant G as Google Sheets
+    participant M as SMTP / Slack
+
+    Cron->>CLI: tracker run
+    CLI->>CLI: load config, then .env (real env vars win)
+    CLI->>P: run_once()
+    P->>DB: sync products, append one observation each
+    P->>DB: compare with earlier observations
+    P-->>CLI: observations + changes
+    CLI->>R: build_report()
+    R->>DB: site_runs() per site
+    R-->>CLI: summary + failing sites
+    opt sheets.enabled
+        CLI->>G: append observations, rewrite Latest
+    end
+    alt changes, a newly failing site, or always_send_summary
+        CLI->>M: one digest
+    else nothing changed
+        CLI-->>Cron: "digest: not sent"
+    end
+    CLI-->>Cron: exit 0, or 1 if an enabled channel failed
+```
+
+**Digest.** One message per run, never one per change. Sections, in order: Undercutting you,
+Price changes, Stock, Other changes, Couldn't check, Site health, then the run summary.
+- Email is `multipart/alternative`: plain text and HTML with inline styles (many clients drop
+  `<style>`), one column, max 600 px.
+- Slack gets Block Kit sections with the same content.
+- Titles and errors come from competitor pages, so they're HTML- or Slack-escaped.
+
+**When it's sent.** When there are changes, or a site has just reached 2 failing runs, or
+`always_send_summary` is on. A site that keeps failing stays in the Site health section,
+but doesn't force a send every day.
+
+**Secrets.**
+
+| Variable | Used for |
+|---|---|
+| `SMTP_HOST`, `SMTP_PORT` (587), `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM`, `SMTP_SECURITY` (starttls / ssl / none) | Email |
+| `SLACK_WEBHOOK_URL` (must be `https://hooks.slack.com/…`) | Slack |
+| `GOOGLE_SERVICE_ACCOUNT_JSON` (path to the key file) | Sheets |
+
+They're read from the environment, or from `.env` next to the config or in the current
+folder; real environment variables always win. `check-config` warns when an enabled
+channel is missing one.
+
+**Sheets layout.**
+- "Observations": one row per product per run, appended.
+- "Latest": rewritten every run, with one row per active product and an `undercuts_me`
+  column.
+- Prices are number cells, so the sheet can sort by them; everything else is written RAW.
+
+**Exit codes.** `run` exits 1 when an enabled channel (email, Slack or Sheets) fails, so a
+scheduled run shows up red. Products that can't be checked don't fail the run; they appear
+in the digest.
+
 ## Mock competitor shop
 
 `mock_site/` is a stdlib HTTP server for demos and end-to-end checks. Its state is a JSON file
@@ -296,10 +368,17 @@ flowchart LR
     cfgT[test_config.py]
     chT[test_changes.py]
     real["real mock server<br/>on 127.0.0.1"] --> mockT[test_mock_site.py]
+    fakes["fake SMTP, mocked Slack,<br/>fake gspread spreadsheet"] --> alertT[test_alerts.py]
+    fakes --> sheetT[test_sheets.py]
+    shop --> reportT[test_report.py]
 ```
 
 - An autouse fixture makes any real HTTP request through httpx fail, so no test can touch a
   live site. `test_mock_site.py` is the one place a real server runs, on localhost.
+- Another autouse fixture clears every `SMTP_*`, `SLACK_*` and `GOOGLE_*` variable and stops
+  the CLI from reading `.env`, so a developer's real secrets never reach a test.
+- The fake gspread spreadsheet is checked against gspread's real method signatures, so a
+  library change shows up as a failing test.
 - `test_pipeline.py` is the end-to-end check: the mock shop served through
   `httpx.MockTransport`, through fetch, parse, store and change detection.
 - Fixtures were saved once from the practice sites (see `tests/fixtures/README.md`), plus two
@@ -324,3 +403,8 @@ flowchart LR
 | Zero price → `parse_error` | A parse glitch must not look like a +100% price rise |
 | `run` prints changes in session 3 | `history` and the mock-site check need stored runs before alerts exist |
 | Interleave products across sites | One site's delay overlaps requests to the others, so runs finish sooner |
+| Site "fails" only when all its products fail | One broken page is a product problem; all broken means selectors or a block |
+| Site-failing alert sent once, at 2 runs | Avoids a daily alarm while still listing the problem |
+| Sheets written RAW, prices as numbers | No formula injection from competitor text; the sheet can still sort by price |
+| `run` exits 1 when a channel fails | A broken SMTP password shows up as a red scheduled run, not silence |
+| Email + Slack in one `deliver()`, Slack off by default | Demo uses email only; Slack is ready when a client asks |
