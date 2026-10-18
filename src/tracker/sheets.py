@@ -49,6 +49,8 @@ LATEST_HEADER = [
     "error",
 ]
 NEW_TAB_ROWS = 1000
+MONEY_COLUMNS = ("my_price", "price")
+TWO_DECIMALS = {"numberFormat": {"type": "NUMBER", "pattern": "0.00"}}
 
 _SHEET_URL_ID = re.compile(r"/spreadsheets/d/([A-Za-z0-9_-]+)")
 
@@ -59,6 +61,7 @@ class Worksheet(Protocol):
     def clear(self) -> Any: ...
     def update(self, values: list[list[Any]], range_name: str | None = ..., **kw: Any) -> Any: ...
     def freeze(self, rows: int | None = ..., cols: int | None = ...) -> Any: ...
+    def format(self, ranges: list[str] | str, format: dict[str, Any]) -> Any: ...
 
 
 class Spreadsheet(Protocol):
@@ -151,6 +154,21 @@ def latest_rows(latest: list[tuple[ProductRow, Observation]], config: Config) ->
     return rows
 
 
+def _column(header: list[str], name: str) -> str:
+    """Spreadsheet column letter for a header name: 0 -> A, 25 -> Z, 26 -> AA."""
+    index, letters = header.index(name) + 1, ""
+    while index:
+        index, rem = divmod(index - 1, 26)
+        letters = chr(ord("A") + rem) + letters
+    return letters
+
+
+def _format_money(tab: Worksheet, header: list[str]) -> None:
+    """Show prices as 24.00, not 24 (number cells have no decimals by default)."""
+    ranges = [f"{c}2:{c}" for c in (_column(header, n) for n in MONEY_COLUMNS if n in header)]
+    tab.format(ranges, TWO_DECIMALS)
+
+
 def _tab(spreadsheet: Spreadsheet, title: str, header: list[str]) -> tuple[Worksheet, bool]:
     """The named tab, created (with a frozen header row) if missing. Returns (tab, created)."""
     try:
@@ -174,10 +192,12 @@ def write(
         rows = [OBSERVATION_HEADER, *rows]
     # RAW: a competitor title like "=IMPORTXML(...)" stays text and never runs as a formula.
     history.append_rows(rows, value_input_option="RAW")
+    _format_money(history, OBSERVATION_HEADER)
 
     current, _ = _tab(spreadsheet, config.sheets.latest_tab, LATEST_HEADER)
     current.clear()
     current.update([LATEST_HEADER, *latest_rows(latest, config)], "A1", raw=True)
+    _format_money(current, LATEST_HEADER)
 
 
 OpenSpreadsheet = Callable[[Path, str], Spreadsheet]

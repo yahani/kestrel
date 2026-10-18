@@ -11,6 +11,7 @@ import pytest
 from gspread.exceptions import APIError, SpreadsheetNotFound, WorksheetNotFound
 
 from tests.conftest import MOCK_CONFIG_FILE
+from tracker import sheets
 from tracker.config import Config, load_config
 from tracker.pipeline import run_once
 from tracker.sheets import LATEST_HEADER, OBSERVATION_HEADER, export, spreadsheet_key
@@ -34,6 +35,7 @@ class FakeWorksheet:
         self.rows: list[list] = []
         self.frozen_rows = 0
         self.calls: list[str] = []
+        self.formats: list[tuple] = []
 
     def row_values(self, row):
         return [str(v) for v in self.rows[row - 1]] if len(self.rows) >= row else []
@@ -54,6 +56,10 @@ class FakeWorksheet:
     def freeze(self, rows=None, cols=None):
         self.frozen_rows = rows
 
+    def format(self, ranges, format):
+        self.calls.append("format")
+        self.formats.append((ranges, format))
+
 
 class FakeSpreadsheet:
     def __init__(self, tabs=()):
@@ -72,7 +78,11 @@ class FakeSpreadsheet:
 def test_fakes_match_gspread_signatures():
     """Keep the fakes honest: same method names and parameters as gspread 6."""
     pairs = [
-        (FakeWorksheet, gspread.Worksheet, ["row_values", "append_rows", "clear", "freeze"]),
+        (
+            FakeWorksheet,
+            gspread.Worksheet,
+            ["row_values", "append_rows", "clear", "freeze", "format"],
+        ),
         (FakeSpreadsheet, gspread.Spreadsheet, ["worksheet", "add_worksheet"]),
     ]
     for fake, real, names in pairs:
@@ -151,8 +161,8 @@ def test_observations_are_appended_and_latest_is_rewritten(two_runs, key_file):
     assert len(history.rows) == 1 + 4 + 4  # one header, two runs
     assert history.rows.count(OBSERVATION_HEADER) == 1
     assert len(latest.rows) == 1 + 4
-    assert latest.calls[-2:] == ["clear", "update:A1:raw=True"]
-    assert all(call == "append_rows:RAW" for call in history.calls)
+    assert latest.calls[-3:] == ["clear", "update:A1:raw=True", "format"]
+    assert [c for c in history.calls if c != "format"] == ["append_rows:RAW"] * 2
 
 
 def test_row_values_match_the_database(two_runs, key_file):
@@ -236,7 +246,7 @@ def test_formula_looking_titles_stay_text(two_runs, key_file):
 
     history = sheet.tabs["Observations"]
     assert history.rows[1][6] == "=IMPORTXML(A1)"
-    assert history.calls == ["append_rows:RAW"]  # RAW: stored as text, never run as a formula
+    assert history.calls[0] == "append_rows:RAW"  # RAW: stored as text, never run as a formula
 
 
 # --- configuration and failures ----------------------------------------------------------
@@ -302,3 +312,22 @@ def test_google_errors_are_reported_not_raised(two_runs, key_file, error, hint):
 def test_same_tab_names_rejected():
     with pytest.raises(Exception, match="must be different tabs"):
         sheets_config(observations_tab="X", latest_tab="X")
+
+
+def test_price_columns_show_two_decimals(two_runs, key_file):
+    """Whole prices would otherwise show as 24 instead of 24.00."""
+    store, first, _ = two_runs
+    sheet = FakeSpreadsheet()
+    do_export(sheet, store, first, key_file)
+
+    two_dp = {"numberFormat": {"type": "NUMBER", "pattern": "0.00"}}
+    assert sheet.tabs["Latest"].formats == [(["D2:D", "F2:F"], two_dp)]  # my_price, price
+    assert sheet.tabs["Observations"].formats == [(["H2:H"], two_dp)]  # price
+    assert LATEST_HEADER[3] == "my_price" and LATEST_HEADER[5] == "price"
+    assert OBSERVATION_HEADER[7] == "price"
+
+
+def test_column_letter():
+    assert sheets._column(["a", "b", "price"], "price") == "C"
+    many = [f"c{i}" for i in range(30)]
+    assert sheets._column(many, "c26") == "AA"
