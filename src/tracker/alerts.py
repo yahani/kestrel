@@ -232,7 +232,7 @@ def missing_secrets(config: Config, env: Mapping[str, str]) -> list[str]:
 SmtpFactory = Callable[[SmtpSettings], smtplib.SMTP]
 
 
-def _connect(settings: SmtpSettings) -> smtplib.SMTP:
+def connect_smtp(settings: SmtpSettings) -> smtplib.SMTP:
     context = ssl.create_default_context()
     if settings.security == "ssl":
         return smtplib.SMTP_SSL(
@@ -245,7 +245,7 @@ def _connect(settings: SmtpSettings) -> smtplib.SMTP:
 
 
 def send_email(
-    digest: Digest, to: list[str], settings: SmtpSettings, connect: SmtpFactory = _connect
+    digest: Digest, to: list[str], settings: SmtpSettings, connect: SmtpFactory = connect_smtp
 ) -> Delivery:
     message = EmailMessage()
     message["Subject"] = digest.subject
@@ -289,7 +289,7 @@ def deliver(
     config: Config,
     env: Mapping[str, str],
     *,
-    connect: SmtpFactory = _connect,
+    connect: SmtpFactory = connect_smtp,
     http_client: httpx.Client | None = None,
 ) -> list[Delivery]:
     """Send the digest on every enabled channel. Never raises; each result says what happened."""

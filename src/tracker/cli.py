@@ -2,16 +2,21 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Annotated
 
 import typer
+from dotenv import load_dotenv
 
+from tracker import alerts, sheets
+from tracker.alerts import Delivery, build_digest, deliver, missing_secrets, should_send
 from tracker.changes import format_money
 from tracker.config import Config, ConfigError, load_config
 from tracker.fetch import Fetcher
 from tracker.parse import parse_page
 from tracker.pipeline import run_once
+from tracker.report import build_report
 from tracker.store import Observation, Store
 
 app = typer.Typer(
@@ -30,6 +35,26 @@ def _load_or_exit(path: Path) -> Config:
     except ConfigError as exc:
         typer.echo(f"✗ {exc}", err=True)
         raise typer.Exit(code=1) from exc
+
+
+def _load_env(config_path: Path) -> None:
+    """Load secrets from a .env next to the config, then from the current folder.
+
+    Real environment variables (e.g. GitHub Actions secrets) always win.
+    """
+    for env_file in (config_path.parent / ".env", Path.cwd() / ".env"):
+        if env_file.is_file():
+            load_dotenv(env_file, override=False)
+
+
+def _secret_problems(cfg: Config) -> list[str]:
+    problems = missing_secrets(cfg, os.environ)
+    if cfg.sheets.enabled:
+        try:
+            sheets.service_account_path(os.environ)
+        except ValueError as exc:
+            problems.append(str(exc))
+    return problems
 
 
 def _on_off(enabled: bool) -> str:
@@ -55,6 +80,10 @@ def check_config(config: ConfigOption = DEFAULT_CONFIG) -> None:
     )
     typer.echo(f"  sheets:   {_on_off(cfg.sheets.enabled)}")
 
+    _load_env(config)
+    for problem in _secret_problems(cfg):
+        typer.echo(f"! {problem}")
+
 
 def _db_path(config_path: Path, cfg: Config) -> Path:
     """The database path from config, relative to the config file's folder."""
@@ -68,34 +97,68 @@ def run(
     dry_run: Annotated[
         bool,
         typer.Option(
-            "--dry-run", help="Fetch and detect changes, but send no alerts and write nothing."
+            "--dry-run",
+            help="Fetch and detect changes, then preview the digest. Saves nothing, sends nothing.",
         ),
     ] = False,
 ) -> None:
-    """Run the daily pipeline: fetch, parse, store, detect changes.
+    """Run the daily pipeline: fetch, parse, store, detect changes, export, send the digest.
 
-    Alerts, Sheets export and the health report are added in build session 4; for now the
-    changes are printed.
+    Exits with status 1 if an enabled channel (email, Slack, Sheets) failed, so a scheduled
+    run shows up as failed. Products that can't be checked are reported in the digest instead.
     """
     cfg = _load_or_exit(config)
+    _load_env(config)
     db = _db_path(config, cfg)
     store = Store.scratch_copy(db) if dry_run else Store.open(db)
     with store, _make_fetcher(cfg) as fetcher:
         result = run_once(cfg, store, fetcher)
+        report = build_report(result, store)
+        latest = store.latest_observations()
 
-    typer.echo(
-        f"run {result.run_id}: {len(result.observations)} products, {result.succeeded} ok, "
-        f"{result.failed} failed, {len(result.changes)} change"
-        f"{'' if len(result.changes) == 1 else 's'} ({result.seconds:.1f}s)"
-    )
-    for change in result.changes:
+    typer.echo(f"run {result.run_id}: {report.summary()}")
+    for change in report.changes:
         typer.echo(f"  • {change.describe()}")
     failures = [(p, o) for p, o in result.observations if not o.ok]
     if failures:
         typer.echo("failed this run:")
         for product, observation in failures:
             typer.echo(f"  ✗ {product.url}: {observation.status} ({observation.error})")
-    typer.echo("(dry run: nothing was saved)" if dry_run else f"saved to {db}")
+    for site in report.failing_sites:
+        typer.echo(f"  ! {site.describe()}")
+
+    digest = build_digest(report, result.started_at.date())
+    send = should_send(report, cfg.alerts.always_send_summary)
+    if dry_run:
+        typer.echo("(dry run: nothing saved, no digest sent, Sheets not updated)")
+        if send:
+            typer.echo("\n--- digest preview ---\n" + digest.text)
+        else:
+            typer.echo("digest: would not be sent (nothing changed)")
+        return
+
+    deliveries: list[Delivery] = []
+    if cfg.sheets.enabled:
+        deliveries.append(
+            sheets.export(cfg, os.environ, result.observations, latest, open_fn=_open_spreadsheet)
+        )
+    if not send:
+        typer.echo("digest: not sent (nothing changed)")
+    elif not (cfg.alerts.email.enabled or cfg.alerts.slack.enabled):
+        typer.echo("digest: no channel enabled (alerts.email or alerts.slack)")
+    else:
+        deliveries += deliver(digest, cfg, os.environ, connect=_smtp_connect)
+    for delivery in deliveries:
+        mark = "✓" if delivery.ok else "✗"
+        typer.echo(f"{delivery.channel}: {mark} {delivery.detail}")
+    typer.echo(f"saved to {db}")
+    if any(not d.ok for d in deliveries):
+        raise typer.Exit(code=1)
+
+
+# Seams for tests: the real SMTP connection and Google client.
+_smtp_connect = alerts.connect_smtp
+_open_spreadsheet = sheets.open_spreadsheet
 
 
 def _make_fetcher(cfg: Config) -> Fetcher:

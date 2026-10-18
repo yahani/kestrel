@@ -88,3 +88,19 @@ def mock_config_file(tmp_path) -> Path:
     path = tmp_path / "mock-config.yaml"
     path.write_text(yaml.safe_dump(data, sort_keys=False))
     return path
+
+
+SECRET_VARS = [
+    "SMTP_HOST", "SMTP_PORT", "SMTP_USER", "SMTP_PASSWORD", "SMTP_FROM", "SMTP_SECURITY",
+    "SLACK_WEBHOOK_URL", "GOOGLE_SERVICE_ACCOUNT_JSON",
+]  # fmt: skip
+
+
+@pytest.fixture(autouse=True)
+def _no_real_secrets(monkeypatch):
+    """Tests never see real secrets: clear them and stop the CLI from reading any .env file."""
+    for name in SECRET_VARS:
+        monkeypatch.delenv(name, raising=False)
+    import tracker.cli
+
+    monkeypatch.setattr(tracker.cli, "load_dotenv", lambda *args, **kwargs: False)

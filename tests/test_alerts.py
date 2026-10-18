@@ -10,8 +10,8 @@ import pytest
 from tests.conftest import MOCK_CONFIG_FILE
 from tracker.alerts import (
     Delivery,
-    _connect,
     build_digest,
+    connect_smtp,
     deliver,
     missing_secrets,
     send_email,
@@ -404,7 +404,7 @@ def test_connect_uses_the_right_transport(monkeypatch, security, cls, tls):
     monkeypatch.setattr(smtplib, "SMTP", FakeConnection)
     monkeypatch.setattr(smtplib, "SMTP_SSL", type("FakeSSL", (FakeConnection,), {}))
     settings = smtp_settings({**ENV, "SMTP_SECURITY": security})
-    conn = _connect(settings)
+    conn = connect_smtp(settings)
     assert type(conn).__name__ == ("FakeConnection" if cls == "SMTP" else "FakeSSL")
     assert conn.args[:2] == ("smtp.example.com", 587)
     assert conn.tls is tls

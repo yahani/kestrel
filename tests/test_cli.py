@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 
 import httpx
@@ -160,14 +161,15 @@ def test_run_prints_summary_and_changes(shop_cli):
     shop, config = shop_cli
     first = invoke("run", "-c", config)
     assert first.exit_code == 0, first.output
-    assert "4 products, 4 ok, 0 failed, 0 changes" in first.output
+    assert "4 products checked: 4 ok, 0 failed, 0 changes" in first.output
+    assert "digest: not sent (nothing changed)" in first.output
     assert f"saved to {config.parent / 'tracker.db'}" in first.output
 
     shop.set("blue-mug", price="19.50")
     shop.overrides["/product/red-mug"] = httpx.Response(404)
     second = invoke("run", "-c", config)
     assert second.exit_code == 0, second.output
-    assert "4 products, 3 ok, 1 failed, 2 changes" in second.output
+    assert "4 products checked: 3 ok, 1 failed, 2 changes" in second.output
     assert "• rival-x cut Blue Mug from $24.00 to $19.50 (-18.8%), below your $23.00" in (
         second.output
     )
@@ -182,7 +184,9 @@ def test_dry_run_saves_nothing(shop_cli):
     dry = invoke("run", "-c", config, "--dry-run")
     assert dry.exit_code == 0, dry.output
     assert "1 change" in dry.output
-    assert "(dry run: nothing was saved)" in dry.output
+    assert "(dry run: nothing saved, no digest sent, Sheets not updated)" in dry.output
+    assert "--- digest preview ---" in dry.output
+    assert "UNDERCUTTING YOU" in dry.output
 
     # The real run still sees the change, so the dry run didn't record anything.
     assert "1 change" in invoke("run", "-c", config).output
@@ -289,3 +293,193 @@ def test_relative_database_path_is_next_to_config(tmp_path):
     assert cli._db_path(tmp_path / "c.yaml", cfg) == tmp_path / "tracker.db"
     absolute = cfg.model_copy(update={"database": str(tmp_path / "x" / "t.db")})
     assert cli._db_path(Path("elsewhere/c.yaml"), absolute) == tmp_path / "x" / "t.db"
+
+
+# --- delivery from `run` (session 4) -------------------------------------------------
+
+SMTP_ENV = {
+    "SMTP_HOST": "smtp.example.com",
+    "SMTP_USER": "tracker@example.com",
+    "SMTP_PASSWORD": "app-password",
+}
+
+
+def edit_config(path, **changes):
+    data = yaml.safe_load(path.read_text())
+    for dotted, value in changes.items():
+        target = data
+        *parents, leaf = dotted.split("__")
+        for key in parents:
+            target = target.setdefault(key, {})
+        target[leaf] = value
+    path.write_text(yaml.safe_dump(data, sort_keys=False))
+
+
+class RecordingSMTP:
+    def __init__(self):
+        self.sent = []
+
+    def __call__(self, settings):
+        return self
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+    def login(self, user, password):
+        pass
+
+    def send_message(self, message):
+        self.sent.append(message)
+
+
+@pytest.fixture
+def email_cli(shop_cli, monkeypatch):
+    shop, config = shop_cli
+    edit_config(config, alerts__email={"enabled": True, "to": ["owner@example.com"]})
+    smtp = RecordingSMTP()
+    monkeypatch.setattr(cli, "_smtp_connect", smtp)
+    for key, value in SMTP_ENV.items():
+        monkeypatch.setenv(key, value)
+    return shop, config, smtp
+
+
+def test_run_emails_one_digest_when_something_changed(email_cli):
+    shop, config, smtp = email_cli
+    first = invoke("run", "-c", config)
+    assert first.exit_code == 0, first.output
+    assert smtp.sent == []  # first run: nothing changed, nothing sent
+
+    for change in ({"slug": "blue-mug", "price": "19.50"},
+                   {"slug": "green-teapot", "price": "49.50"},
+                   {"slug": "red-mug", "stock": 0}):  # fmt: skip
+        shop.set(**change)
+    second = invoke("run", "-c", config)
+    assert second.exit_code == 0, second.output
+    assert "email: ✓ sent to owner@example.com" in second.output
+    [message] = smtp.sent
+    assert message["Subject"].endswith(": 3 changes, 1 undercut")
+    body = message.get_body(("plain",)).get_content()
+    assert body.count("\n- ") == 3
+
+    third = invoke("run", "-c", config)
+    assert "digest: not sent (nothing changed)" in third.output
+    assert len(smtp.sent) == 1  # running again with no changes sends nothing
+
+
+def test_always_send_summary_sends_even_without_changes(email_cli):
+    _, config, smtp = email_cli
+    edit_config(config, alerts__always_send_summary=True)
+    invoke("run", "-c", config)
+    [message] = smtp.sent
+    assert message["Subject"].endswith(": no changes")
+
+
+def test_run_exits_1_when_email_cannot_be_sent(email_cli, monkeypatch):
+    shop, config, _smtp = email_cli
+    invoke("run", "-c", config)
+    monkeypatch.delenv("SMTP_HOST")
+    shop.set("blue-mug", price="19.50")
+    result = invoke("run", "-c", config)
+    assert result.exit_code == 1
+    assert "email: ✗ email is enabled but SMTP_HOST not set" in result.output
+    assert "saved to" in result.output  # observations are still stored
+
+
+def test_dry_run_never_sends(email_cli):
+    shop, config, smtp = email_cli
+    invoke("run", "-c", config)
+    shop.set("blue-mug", price="19.50")
+    invoke("run", "-c", config, "--dry-run")
+    assert smtp.sent == []
+
+
+def test_dry_run_preview_when_nothing_would_be_sent(shop_cli):
+    _, config = shop_cli
+    result = invoke("run", "-c", config, "--dry-run")
+    assert "digest: would not be sent (nothing changed)" in result.output
+
+
+def test_run_with_no_channel_enabled(shop_cli):
+    shop, config = shop_cli
+    invoke("run", "-c", config)
+    shop.set("blue-mug", price="19.50")
+    result = invoke("run", "-c", config)
+    assert result.exit_code == 0
+    assert "digest: no channel enabled (alerts.email or alerts.slack)" in result.output
+
+
+def test_run_reports_failing_site(shop_cli):
+    shop, config = shop_cli
+    for slug in ("blue-mug", "red-mug", "green-teapot", "coaster-set"):
+        shop.overrides[f"/product/{slug}"] = httpx.Response(200, text="<html></html>")
+    invoke("run", "-c", config)
+    result = invoke("run", "-c", config)
+    assert "! rival-x failed 2 runs in a row (parse_error)" in result.output
+
+
+def test_run_exports_to_sheets(shop_cli, monkeypatch, tmp_path):
+    from tests.test_sheets import FakeSpreadsheet
+
+    _, config = shop_cli
+    key = tmp_path / "key.json"
+    key.write_text("{}")
+    monkeypatch.setenv("GOOGLE_SERVICE_ACCOUNT_JSON", str(key))
+    edit_config(config, sheets={"enabled": True, "spreadsheet_id": "abc"})
+    sheet = FakeSpreadsheet()
+    monkeypatch.setattr(cli, "_open_spreadsheet", lambda path, sheet_id: sheet)
+
+    result = invoke("run", "-c", config)
+    assert result.exit_code == 0, result.output
+    assert "sheets: ✓ 4 rows added, 4 in Latest" in result.output
+    assert len(sheet.tabs["Latest"].rows) == 5
+
+
+def test_run_exits_1_when_sheets_fails(shop_cli):
+    _, config = shop_cli
+    edit_config(config, sheets={"enabled": True, "spreadsheet_id": "abc"})
+    result = invoke("run", "-c", config)
+    assert result.exit_code == 1
+    assert "sheets: ✗ sheets is enabled but GOOGLE_SERVICE_ACCOUNT_JSON is not set" in result.output
+
+
+def test_check_config_warns_about_missing_secrets(shop_cli):
+    _, config = shop_cli
+    edit_config(
+        config,
+        alerts__email={"enabled": True, "to": ["a@example.com"]},
+        sheets={"enabled": True, "spreadsheet_id": "abc"},
+    )
+    result = invoke("check-config", "-c", config)
+    assert result.exit_code == 0  # the file itself is valid
+    assert "! email is enabled but SMTP_HOST, SMTP_FROM (or SMTP_USER) not set" in result.output
+    assert "! sheets is enabled but GOOGLE_SERVICE_ACCOUNT_JSON is not set" in result.output
+
+
+def test_check_config_no_warnings_when_secrets_set(email_cli):
+    _, config, _ = email_cli
+    assert "!" not in invoke("check-config", "-c", config).output
+
+
+def test_load_env_reads_dotenv_next_to_config(tmp_path, monkeypatch):
+    from dotenv import load_dotenv
+
+    monkeypatch.setattr(cli, "load_dotenv", load_dotenv)  # the real one, for this test only
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "conf").mkdir()
+    (tmp_path / "conf" / ".env").write_text("SMTP_HOST=from-config-dir\nSMTP_PASSWORD=file\n")
+    (tmp_path / ".env").write_text("SMTP_HOST=from-cwd\nSMTP_USER=cwd-user\n")
+    monkeypatch.setenv("SMTP_PASSWORD", "real-env-wins")
+    # Registered so monkeypatch removes whatever load_dotenv sets when the test ends.
+    monkeypatch.setenv("SMTP_HOST", "")
+    monkeypatch.delenv("SMTP_HOST")
+    monkeypatch.setenv("SMTP_USER", "")
+    monkeypatch.delenv("SMTP_USER")
+
+    cli._load_env(tmp_path / "conf" / "config.yaml")
+
+    assert os.environ["SMTP_HOST"] == "from-config-dir"  # config folder first
+    assert os.environ["SMTP_USER"] == "cwd-user"  # then the current folder
+    assert os.environ["SMTP_PASSWORD"] == "real-env-wins"  # never overrides real env
