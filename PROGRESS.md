@@ -3,7 +3,7 @@
 Updated after every step. Requirement IDs refer to the spec (F1–F12). How the pieces fit
 together is in [ARCHITECTURE.md](ARCHITECTURE.md).
 
-_Last updated: 2026-10-18, session 3 in progress._
+_Last updated: 2026-10-18, end of session 3._
 
 ## 1. Done, by requirement
 
@@ -28,7 +28,7 @@ _Last updated: 2026-10-18, session 3 in progress._
 |---|---|---|---|
 | 1 | Skeleton, F1, F11 shell, CI | ✅ | `89af1d0` … `196327b` |
 | 2 | F2, F3, F4, `test-selectors`, fixtures, ARCHITECTURE.md | ✅ | `1e5fdc8` … `ec49626` |
-| 3 | F4 price fix; F5, F6, F7, `history`, mock site | 🔄 in progress | |
+| 3 | F4 price fix; F5, F6, F7, `history`, `run` (prints), mock site | ✅ | `1a3d1c6` … this commit |
 
 ## 2. Test results
 
@@ -65,18 +65,30 @@ Tests make no network calls: real HTTP is blocked in `tests/conftest.py`.
 
 ## 3. Next
 
-Session 3 (approved), in this order:
+Session 3 is done. Session 4 needs a plan and your approval:
 
-- ✅ **F4 fix:** price picks the right number in promo text.
+- **F8** One email (SMTP) and/or Slack digest per run, nothing when there are no changes
+  unless `always_send_summary` is on.
+- **F9** Google Sheets export: append observations, refresh a "Latest" tab.
+- **F12** Run summary and a "selectors may have changed" alert when a site fails 2 runs in a row.
+- Hook all three into `tracker run`, which currently prints the changes.
 
-- ✅ **F5** SQLite store.
-- ✅ **F6** change detection.
-- ✅ **F7** undercut flag.
-- ✅ **F11** `tracker history`, plus `run` printing changes (pipeline in `pipeline.py`).
-- ✅ Mock competitor shop (`mock_site/`): `python -m mock_site serve | list | set | reset`, plus an `/admin` page; its fixture is saved.
+**By hand, session 3** (done 2026-10-18 against the real mock server on localhost): run 1
+gave 4 ok and 0 changes. Then blue-mug went to 19.50, green-teapot to 49.50 and red-mug to
+stock 0, and run 2 gave **exactly those 3 changes**. Run 3 gave 0 changes, and `history
+MUG-BLUE` showed all 3 observations. Each run took 20 s (5 s delay × 4 products).
 
 ## 4. Blocked or waiting on you
 
-- **Waiting:** your review of the session 2 points: price/stock edge cases in `tests/test_parse.py`, the politeness rules in `fetch.py`, and a live `test-selectors` run.
-- **Not blocking yet:** no GitHub remote, so CI has only run locally. Needed by session 5 (F10); `gh` isn't installed.
-- **Open questions from the spec** (needed by sessions 4–5): GitHub Actions or a paid host, email only or Slack too for the demo, and whether to publish the mock site.
+- **Waiting:** approval of the session 4 plan (not written yet).
+- **Waiting:** your review of session 3 (see the list in the session report).
+- **Needed for session 4:** whether the demo digest goes by email, Slack or both, and SMTP
+  details or a Slack webhook to test with (they go in `.env`, never in the repo).
+  Sheets also needs a Google service account.
+- **`REVIEW.md`:** an untracked file in the repo root that wasn't written in this session.
+  It's left alone and uncommitted. Its 5 "should fix" points were each checked and fixed in
+  `61ff94e`.
+- **Not blocking yet:** no GitHub remote, so CI has only run locally. Needed by session 5
+  (F10); `gh` isn't installed.
+- **Open questions from the spec** (needed by sessions 4–5): GitHub Actions or a paid host,
+  and whether to publish the mock site.

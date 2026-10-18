@@ -7,39 +7,46 @@ every build session; parts not built yet are marked **planned**.
 |---|---|---|
 | 1 | Repo skeleton, config loading (F1), CLI shell (F11), CI | ✅ done |
 | 2 | Fetching (F2), robots.txt (F3), parsing (F4), `test-selectors` | ✅ done |
-| 3 | SQLite store (F5), change detection (F6, F7), mock competitor site | planned |
-| 4 | Email/Slack digest (F8), Sheets export (F9), health report (F12), `run` | planned |
+| 3 | Price fix (F4), SQLite store (F5), change detection (F6, F7), `history` + `run` printing changes (F11), mock competitor site | ✅ done |
+| 4 | Email/Slack digest (F8), Sheets export (F9), health report (F12), hooked into `run` | planned |
 | 5 | GitHub Actions schedule (F10), README, demo | planned |
 
 ## The daily pipeline
 
 One command (`tracker run`) runs a straight pipeline. A product that fails at any step is
-recorded and skipped; it never stops the other products.
+recorded and skipped; it never stops the other products. `pipeline.run_once()` drives it;
+today `tracker run` prints the changes, and session 4 sends them as a digest instead.
 
 ```mermaid
 flowchart LR
     cfg[config.yaml] --> load["Load config<br/>config.py ✅"]
     load --> fetch["Fetch<br/>fetch.py ✅"]
     fetch --> parse["Parse<br/>parse.py ✅"]
-    parse --> store[("Store<br/>store.py · planned")]
-    store --> detect["Detect changes<br/>changes.py · planned"]
+    parse --> store[("Store<br/>store.py ✅")]
+    store --> detect["Detect changes<br/>changes.py ✅"]
     detect --> alert["Alert digest<br/>alerts.py · planned"]
     detect --> sheets["Google Sheet<br/>sheets.py · planned"]
     detect --> report["Run report<br/>report.py · planned"]
 
     classDef planned stroke-dasharray: 5 5,color:#888
-    class store,detect,alert,sheets,report planned
+    class alert,sheets,report planned
 ```
 
 ## Modules
 
 ```mermaid
 flowchart TD
-    cli["cli.py<br/>Typer commands"] --> config["config.py<br/>Pydantic models, load_config()"]
-    cli --> fetch["fetch.py<br/>Fetcher, Throttle, robots rules"]
-    cli --> parse["parse.py<br/>parse_page(), normalise_*()"]
+    cli["cli.py<br/>Typer commands"] --> pipeline["pipeline.py<br/>run_once(), observe(), detect()"]
+    cli --> config["config.py<br/>Pydantic models, load_config()"]
+    cli --> store
+    pipeline --> fetch["fetch.py<br/>Fetcher, Throttle, robots rules"]
+    pipeline --> parse["parse.py<br/>parse_page(), normalise_*()"]
+    pipeline --> store["store.py<br/>Store, ProductRow, Observation"]
+    pipeline --> changes["changes.py<br/>detect_changes(), Change"]
+    changes --> store
     fetch --> config
     parse --> config
+    store --> sqlite[("SQLite")]
     fetch -. "fetch_mode: browser" .-> pw["Playwright<br/>(optional extra)"]
     fetch --> httpx["httpx"]
     parse --> bs4["BeautifulSoup"]
@@ -50,7 +57,10 @@ flowchart TD
 | `config.py` | Reads YAML, validates with Pydantic, turns errors into one line per field (`products[2].site: unknown site 'x'`). Rejects secret-looking keys. Checks CSS selectors compile. | Reads secrets (they come from env vars) |
 | `fetch.py` | One `Fetcher` per run. Checks robots.txt, waits between requests per site, retries, returns a `FetchResult`. | Raises on a bad page, bypasses blocks or CAPTCHAs |
 | `parse.py` | Applies a site's selectors, normalises price text to `Decimal` + currency and stock text to a status + quantity. | Uses floats for money |
-| `cli.py` | `check-config` and `test-selectors` work; `run` and `history` are stubs until sessions 3–4. | Holds business logic |
+| `store.py` | SQLite: syncs `products` from config, appends `observations`, answers "previous", "previous ok", "previous with known stock" and history queries. | Updates or deletes an observation (triggers forbid it) |
+| `changes.py` | Pure function from (product, current, previous observations) to a list of `Change`s with human-readable `describe()`. | Touches the network or database |
+| `pipeline.py` | One run: sync products, interleave them across sites, fetch → parse → record each, then detect changes for the run. | Lets one product's exception stop the run |
+| `cli.py` | `check-config`, `test-selectors`, `run [--dry-run]` (prints changes), `history`. | Holds business logic |
 
 ## Config (F1)
 
@@ -167,6 +177,105 @@ flowchart LR
   quantity (`22 available`, `Only 3 left`) → `in_stock` with qty (0 → `out_of_stock`); other
   in-stock phrases, including an "Add to cart" button → `in_stock`; anything else → `unknown`.
 
+## Storage (F5)
+
+Two tables, as in the spec. Prices are stored as **text** Decimals (SQLite has no decimal
+type, and floats would turn 19.50 into 19.4999…). Triggers make `observations` append-only.
+
+```mermaid
+erDiagram
+    products ||--o{ observations : "has"
+    products {
+        int id PK
+        text site
+        text url UK
+        text my_sku "optional"
+        text my_price "Decimal, optional"
+        int active "0 when removed from config"
+    }
+    observations {
+        int id PK
+        int product_id FK
+        text run_id "one per run"
+        text fetched_at "ISO 8601 UTC"
+        text status "ok | http_error | parse_error | blocked | skipped_robots"
+        text title
+        text price "Decimal"
+        text currency "ISO code"
+        text stock_status "in_stock | out_of_stock | unknown"
+        int stock_qty
+        text error
+    }
+```
+
+- `database:` in config (default `tracker.db`) is resolved relative to the config file.
+- Products are upserted by URL each run; ones removed from config get `active = 0` and keep
+  their history.
+- `tracker run --dry-run` copies the database into memory (`Store.scratch_copy`) and runs
+  there, so it sees real history but writes nothing.
+
+## Change detection (F6, F7)
+
+Each observation in a run is compared with earlier ones for the same product:
+
+```mermaid
+flowchart TD
+    cur([current observation]) --> okq{status ok?}
+    okq -- no --> prevq{previous one<br/>was ok or none?}
+    prevq -- yes --> nf([new_failure])
+    prevq -- no --> none1([nothing: still failing,<br/>F12 handles repeats])
+    okq -- yes --> first{any earlier<br/>ok observation?}
+    first -- no --> none2([nothing: first sighting])
+    first -- yes --> cmp[compare with last ok]
+    cmp --> cur2{same currency?}
+    cur2 -- no --> cc([currency_changed])
+    cur2 -- yes --> pct{"|% change| ≥ threshold?"}
+    pct -- yes --> pc(["price_down / price_up<br/>+ undercut flag if below my_price"])
+    pct -- no --> cross{"crossed below<br/>my_price?"}
+    cross -- yes --> uc([undercut])
+    cmp --> stock["compare stock with last ok<br/>observation whose stock was known"]
+    stock --> so(["out_of_stock / back_in_stock"])
+    cmp --> title{title differs?}
+    title -- yes --> tc([title_changed])
+```
+
+- **Threshold** (`alerts.min_change_percent`, default 1) is inclusive and uses the signed %
+  change rounded to 0.1.
+- **Undercut (F7):** `my_price` is assumed to be in the site's configured currency, so it is
+  only compared when the competitor's price uses that currency. A move below `my_price` is
+  reported **once**: as the price change's undercut flag, or as a separate `undercut` change
+  when the move itself was under the threshold.
+- **Last good observation:** failed runs in between don't hide a change; `24.00 → (failed) →
+  19.50` is still a price drop. Stock skips `unknown` the same way.
+
+## Mock competitor shop
+
+`mock_site/` is a stdlib HTTP server for demos and end-to-end checks. Its state is a JSON file
+re-read on every request, so changes show up on the tracker's next run without a restart.
+
+```mermaid
+sequenceDiagram
+    actor You
+    participant CLI as python -m mock_site
+    participant State as state.json
+    participant Shop as mock shop :8000
+    participant Tracker as tracker run
+
+    You->>CLI: set blue-mug --price 19.50
+    CLI->>State: write
+    You->>Tracker: tracker run -c mock_site/tracker-config.yaml
+    Tracker->>Shop: GET /robots.txt
+    Tracker->>Shop: GET /product/blue-mug (5 s apart)
+    Shop->>State: read
+    Shop-->>Tracker: HTML with $19.50
+    Tracker-->>You: rival-x cut Blue Mug from 24.00 USD to 19.50 USD (-18.8%)
+```
+
+- Pages: `/`, `/product/<slug>`, `/robots.txt` (disallows `/admin`), and `/admin` with forms
+  to change price and stock (handy for the demo video).
+- `mock_site/tracker-config.yaml` points the tracker at it, with `my_price` set on each product.
+- One product's price text includes a "2 for $20" promo, to show the price fix working.
+
 ## Testing
 
 ```mermaid
@@ -180,10 +289,19 @@ flowchart LR
     fx --> parseT[test_parse.py]
     fx --> cliT[test_cli.py]
     mock --> cliT
+    shop["mock shop served<br/>in-process"] --> pipeT[test_pipeline.py]
+    shop --> cliT
+    mem[("in-memory SQLite")] --> storeT[test_store.py]
+    mem --> pipeT
     cfgT[test_config.py]
+    chT[test_changes.py]
+    real["real mock server<br/>on 127.0.0.1"] --> mockT[test_mock_site.py]
 ```
 
-- An autouse fixture makes any real HTTP request fail, so no test can touch a live site.
+- An autouse fixture makes any real HTTP request through httpx fail, so no test can touch a
+  live site. `test_mock_site.py` is the one place a real server runs, on localhost.
+- `test_pipeline.py` is the end-to-end check: the mock shop served through
+  `httpx.MockTransport`, through fetch, parse, store and change detection.
 - Fixtures were saved once from the practice sites (see `tests/fixtures/README.md`), plus two
   synthetic variants for out-of-stock and a changed layout.
 - CI (`.github/workflows/ci.yml`) runs ruff lint + format check, `check-config` on the
@@ -199,3 +317,10 @@ flowchart LR
 | Ambiguous symbols (`$`, `Rs`, `kr`) use the site currency | `$` alone could be USD, CAD, AUD…; the site config knows |
 | Money as `Decimal`, floats from YAML go through `str` | `49.99` stays exactly `49.99` |
 | Product host must match its site's `base_url` | Catches copy-paste mistakes in config before any request |
+| Prices in SQLite as text | Exact Decimals; SQLite has no decimal type |
+| Append-only observations enforced by triggers | "Never overwrite history" holds even for ad-hoc SQL |
+| Compare with the last *successful* observation | A failed run in between doesn't hide or invent changes |
+| One report per undercut event | The digest must list each real change exactly once |
+| Zero price → `parse_error` | A parse glitch must not look like a +100% price rise |
+| `run` prints changes in session 3 | `history` and the mock-site check need stored runs before alerts exist |
+| Interleave products across sites | One site's delay overlaps requests to the others, so runs finish sooner |
