@@ -8,6 +8,8 @@ from typing import Annotated
 import typer
 
 from tracker.config import Config, ConfigError, load_config
+from tracker.fetch import Fetcher
+from tracker.parse import parse_page
 
 app = typer.Typer(
     help="Track competitor prices and stock, and alert when something changes.",
@@ -71,14 +73,69 @@ def run(
     _not_implemented(session=4)
 
 
+def _make_fetcher(cfg: Config) -> Fetcher:
+    return Fetcher(cfg.fetch)
+
+
 @app.command("test-selectors")
 def test_selectors(
     url: Annotated[str, typer.Argument(help="Product page URL to test.")],
     config: ConfigOption = DEFAULT_CONFIG,
+    html_file: Annotated[
+        Path | None,
+        typer.Option("--html", help="Parse this saved HTML file instead of fetching the URL."),
+    ] = None,
+    save: Annotated[
+        Path | None, typer.Option("--save", help="Save the fetched HTML here (for fixtures).")
+    ] = None,
 ) -> None:
     """Fetch one page and show what the site's selectors extract."""
-    _load_or_exit(config)
-    _not_implemented(session=2)
+    cfg = _load_or_exit(config)
+    site = cfg.site_for_url(url)
+    if site is None:
+        known = ", ".join(f"{s.name} ({s.base_url})" for s in cfg.sites)
+        typer.echo(f"✗ no configured site matches {url}. Known sites: {known}", err=True)
+        raise typer.Exit(code=1)
+    typer.echo(f"site:   {site.name} ({site.fetch_mode})")
+
+    if html_file is not None:
+        html = html_file.read_text(encoding="utf-8")
+        typer.echo(f"fetch:  skipped, reading {html_file}")
+    else:
+        with _make_fetcher(cfg) as fetcher:
+            result = fetcher.fetch(url, site)
+        code = f"HTTP {result.http_status}" if result.http_status else "no response"
+        typer.echo(f"fetch:  {result.status} · {code} · {result.elapsed:.2f}s")
+        if not result.ok or result.html is None:
+            typer.echo(f"✗ {result.error}", err=True)
+            raise typer.Exit(code=1)
+        html = result.html
+        if save is not None:
+            save.parent.mkdir(parents=True, exist_ok=True)
+            save.write_text(html, encoding="utf-8")
+            typer.echo(f"saved:  {save}")
+
+    page = parse_page(html, site)
+    normalised = {
+        "title": page.title,
+        "price": f"{page.price} {page.currency}" if page.price is not None else None,
+        "stock": page.stock_status
+        + (f", qty {page.stock_qty}" if page.stock_qty is not None else ""),
+    }
+    typer.echo("")
+    for name, selector in site.selectors.model_dump().items():
+        raw = page.raw.get(name)
+        shown = repr(raw) if raw is not None else "(no match)"
+        typer.echo(f"{name:<6} {selector}")
+        typer.echo(f"       matched: {shown}")
+        if name != "title":
+            typer.echo(f"       value:   {normalised[name]}")
+
+    typer.echo("")
+    if page.status != "ok":
+        typer.echo(f"✗ parse_error: {page.error}", err=True)
+        raise typer.Exit(code=1)
+    typer.echo("✓ parsed ok")
 
 
 @app.command()
