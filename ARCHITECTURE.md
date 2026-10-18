@@ -371,13 +371,16 @@ on a separate `data` branch between runs:
 ```mermaid
 flowchart TD
     trigger(["cron 06:17 UTC<br/>or Run workflow"]) --> checkout[checkout main + uv sync]
-    checkout --> restore{data branch<br/>exists?}
-    restore -- yes --> copy["git show data:tracker.db<br/>→ demo/tracker.db"]
-    restore -- "no (first run)" --> empty[start with empty history]
-    copy & empty --> build["scripts/ci_config.py<br/>email/Sheets on from secrets"]
+    checkout --> restore{"git ls-remote<br/>data branch"}
+    restore -- "missing (exit 2)" --> empty["start empty<br/>restored=new"]
+    restore -- found --> copy["fetch + show tracker.db<br/>→ temp file → check it's our DB<br/>→ move into place"]
+    restore -- "any other error" --> stop(["fail: no outputs,<br/>so nothing is saved"])
+    copy -- "no / unreadable tracker.db" --> stop
+    copy -- ok --> build
+    empty --> build["scripts/ci_config.py<br/>email/Sheets on from secrets"]
     build --> check[tracker check-config]
     check --> run[tracker run]
-    run --> save["save tracker.db to data<br/>(always, even if run failed)"]
+    run --> save["save tracker.db to data<br/>(even if run failed, only if restore succeeded,<br/>never fewer observations than restored)"]
     run --> logs["upload logs/ artifact<br/>kept 30 days"]
     save --> done([next run restores it])
 ```
@@ -388,6 +391,14 @@ flowchart TD
   holds every observation.
 - **Saving runs even if the tracker exits 1:** a failed email still records which runs are
   waiting to be sent, and the next run carries them over.
+- **Never overwriting history with an empty database** (`scripts/data_branch.py`):
+  - Only a branch that's missing, per `ls-remote` exit 2, starts empty.
+  - An unreachable remote, a missing or unreadable `tracker.db`, or a save with fewer
+    observations than were restored all fail without pushing.
+  - The token-bearing remote URL is never printed.
+- **Recipients are never printed or logged:** delivery details give a count ("sent to 1
+  recipient"), and SMTP errors are scrubbed of addresses. On Actions, `ci_config.py` masks
+  each recipient separately, because log artifacts of a public repo are downloadable.
 - **Secrets are never committed:** `DIGEST_EMAIL_TO`, `SMTP_*`, `SHEETS_SPREADSHEET_ID` and
   `GOOGLE_SERVICE_ACCOUNT_KEY` are repository secrets. `ci_config.py` reports only on/off
   and counts. The service-account key is written to the runner's temp folder with mode 600.
@@ -507,4 +518,6 @@ flowchart LR
 | SMTP TLS trusts the system store plus certifi | python.org's macOS Python has no root certificates until a manual step |
 | History on a `data` branch, force-pushed as one commit | Free and permanent (the Actions cache can be evicted); the repo doesn't grow daily |
 | The workflow builds its config from secrets | The recipient and sheet stay out of a public repo |
-| Public repo | Portfolio link; a private repo would also be free at ~2 Actions minutes a day |
+| Public repo | Portfolio link; a private repo would also be free at ~2 Actions minutes a day. Use private for real clients, because the `data` branch is readable |
+| Start empty only on "branch missing" | A network error must fail the run, not erase the history |
+| Delivery details are counts, not addresses | Logs and artifacts can be public; recipients are private |

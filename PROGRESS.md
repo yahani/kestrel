@@ -82,7 +82,7 @@ Tests make no network calls: real HTTP is blocked in `tests/conftest.py`.
 - [x] Google Sheet "Latest" tab matches the database. Checked 2026-10-18 by reading the real sheet back through the API: 4 rows, 0 mismatches on every field; headers frozen; prices are number cells.
 - [ ] GitHub Actions run succeeds on schedule and on manual trigger. **Manual: ✅** (2 runs on 2026-10-18, with history restored between them). **Scheduled: waiting** for the first cron run, 2026-10-19 06:17 UTC; GitHub can delay scheduled runs by some minutes.
 - [x] A fresh clone plus the README gets a stranger running in under 15 minutes. Checked 2026-10-18: cloned from GitHub into an empty folder with an **empty uv cache** and followed only the README quick start. Clone and install took 25 s, the tests 10 s, and the mock-shop demo with a dry-run digest preview 43 s: **78 s of commands** in total, and the clone stayed clean. (Assumes Python 3.12 and uv are installed; installing uv takes about a minute.)
-- [x] No secrets in the repository history. Final gitleaks scan on 2026-10-18 of all 44 commits on `main` and `data`: no leaks. The public `data` branch database contains no secret-looking strings. CI repeats the full-history scan on every push.
+- [x] No secrets in the repository history. Final gitleaks scan on 2026-10-18 of all commits on `main` and `data`, re-run after the review fixes: no leaks. The public `data` branch database contains no secret-looking strings. CI repeats the full-history scan on every push.
 
 ## 3. Next
 
