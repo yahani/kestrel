@@ -61,11 +61,11 @@ flowchart TD
 | `config.py` | Reads YAML, validates with Pydantic, turns errors into one line per field (`products[2].site: unknown site 'x'`). Rejects secret-looking keys. Checks CSS selectors compile. | Reads secrets (they come from env vars) |
 | `fetch.py` | One `Fetcher` per run. Checks robots.txt, waits between requests per site, retries, returns a `FetchResult`. | Raises on a bad page, bypasses blocks or CAPTCHAs |
 | `parse.py` | Applies a site's selectors, normalises price text to `Decimal` + currency and stock text to a status + quantity. | Uses floats for money |
-| `store.py` | SQLite: syncs `products` from config, appends `observations`, answers "previous", "previous ok", "previous with known stock" and history queries. | Updates or deletes an observation (triggers forbid it) |
+| `store.py` | SQLite: syncs `products` from config, appends `observations`, records `runs`/`deliveries`, answers "previous", "previous ok", "previous with known stock" and history queries. | Updates or deletes an observation (triggers forbid it) |
 | `changes.py` | Pure function from (product, current, previous observations) to a list of `Change`s with human-readable `describe()`. | Touches the network or database |
 | `pipeline.py` | One run: sync products, interleave them across sites, fetch → parse → record each, then detect changes for the run. | Lets one product's exception stop the run |
 | `report.py` | Run summary and site health: a site whose products **all** fail 2 runs in a row is flagged once. | Sends anything |
-| `alerts.py` | Builds one digest per run (text, HTML, Slack blocks) and sends it by SMTP and/or Slack webhook. | Reads secrets from config, or raises on a failed send |
+| `alerts.py` | Builds one digest per run (text, HTML, Slack blocks), adds anything a channel missed, sends it by SMTP and/or Slack webhook, and marks what got through. | Reads secrets from config, or raises on a failed send |
 | `sheets.py` | Appends the run's observations and rewrites the "Latest" tab through a service account. | Lets a competitor's text become a formula (writes RAW) |
 | `cli.py` | `check-config`, `test-selectors`, `run [--dry-run]`, `history`; loads `.env`; wires report → Sheets → digest. | Holds business logic |
 
@@ -186,7 +186,8 @@ flowchart LR
 
 ## Storage (F5)
 
-Two tables, as in the spec. Prices are stored as **text** Decimals (SQLite has no decimal
+Two tables hold the data, as in the spec: `products` and `observations`. Two more record
+what each run's digest had to say and where it got to (see "Undelivered digests" below). Prices are stored as **text** Decimals (SQLite has no decimal
 type, and floats would turn 19.50 into 19.4999…). Triggers make `observations` append-only.
 
 ```mermaid
@@ -213,7 +214,24 @@ erDiagram
         int stock_qty
         text error
     }
+    runs ||--o{ deliveries : "reached"
+    runs {
+        text run_id PK
+        text started_at "ISO 8601 UTC"
+        text channels "e.g. email,slack"
+        text items "JSON: section, text, url"
+    }
+    deliveries {
+        int id PK
+        text run_id FK
+        text channel "email | slack"
+        text delivered_in "run whose digest carried it"
+        text delivered_at
+    }
 ```
+
+All four tables are append-only where it matters: triggers block UPDATE and DELETE on
+`observations`, `runs` and `deliveries`.
 
 - `database:` in config (default `tracker.db`) is resolved relative to the config file.
 - Products are upserted by URL each run; ones removed from config get `active = 0` and keep
@@ -279,9 +297,13 @@ sequenceDiagram
     opt sheets.enabled
         CLI->>G: append observations, rewrite Latest
     end
-    alt changes, a newly failing site, or always_send_summary
-        CLI->>M: one digest
-    else nothing changed
+    CLI->>DB: record_run(items, enabled channels)
+    CLI->>DB: pending_runs(channel) for each channel
+    alt changes, a newly failing site, pending items, or always_send_summary
+        CLI->>M: one digest per channel (incl. carried-over items)
+        M-->>CLI: ok / failed
+        CLI->>DB: record_delivery() for each run it carried, only on success
+    else nothing to say
         CLI-->>Cron: "digest: not sent"
     end
     CLI-->>Cron: exit 0, or 1 if an enabled channel failed
@@ -314,7 +336,27 @@ channel is missing one.
 - "Observations": one row per product per run, appended.
 - "Latest": rewritten every run, with one row per active product and an `undercuts_me`
   column.
-- Prices are number cells, so the sheet can sort by them; everything else is written RAW.
+- Prices are number cells formatted `0.00`, so the sheet can sort by them; everything else
+  is written RAW.
+- This is the **one deliberate exception to "Decimal, never float"**: Sheets stores every
+  number as a double anyway, so prices are converted at this output boundary only. The
+  database stays exact.
+- **Known limitation:** "Latest" is cleared and then rewritten. If the write fails, the tab
+  stays empty until the next successful run. History is unaffected.
+
+**Undelivered digests.** Observations are saved before anything is sent, so a failed send
+would otherwise lose the alert: the next run compares against the new prices and sees
+nothing to report. Instead:
+1. Every real run writes a `runs` row with the items its digest had to say (changes and new
+   site alerts) and the channels that were enabled.
+2. Before sending, each channel looks up earlier runs with items that never reached it.
+   They go into that channel's digest under **"From earlier runs that couldn't be sent"**,
+   oldest first, each labelled with its run's time.
+3. A `deliveries` row is written per run per channel **only after a successful send**.
+
+Pending is tracked per channel, so a broken Slack webhook doesn't make email repeat itself.
+Runs from before a channel was enabled are never carried to it. A dry run records, marks
+and sends nothing.
 
 **Exit codes.** `run` exits 1 when an enabled channel (email, Slack or Sheets) fails, so a
 scheduled run shows up red. Products that can't be checked don't fail the run; they appear
@@ -408,3 +450,6 @@ flowchart LR
 | Sheets written RAW, prices as numbers | No formula injection from competitor text; the sheet can still sort by price |
 | `run` exits 1 when a channel fails | A broken SMTP password shows up as a red scheduled run, not silence |
 | Email + Slack in one `deliver()`, Slack off by default | Demo uses email only; Slack is ready when a client asks |
+| Carry undelivered digest items, per channel, in append-only tables | A failed send must not lose an alert, and history stays immutable |
+| Site-health advice depends on the failure type | "Selectors changed" is wrong advice when the site is blocking us |
+| SMTP TLS trusts the system store plus certifi | python.org's macOS Python has no root certificates until a manual step |

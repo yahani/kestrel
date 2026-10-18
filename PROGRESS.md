@@ -114,7 +114,7 @@ Session 4 is done. Session 5 needs a plan and your approval:
 
 ## 4. Blocked or waiting on you
 
-- **Waiting:** approval of the session 5 plan (not written yet).
+- **Waiting:** your approval of the session 5 plan (written 2026-10-18, see the session report) and the 4 decisions it asks for.
 - **Waiting:** your review of session 4 (see the list in the session report).
 - **Walkthroughs you asked for:**
   1. ✅ SMTP setup for the email digest: **done**. `.env` has all five `SMTP_*` values,
@@ -130,8 +130,9 @@ Session 4 is done. Session 5 needs a plan and your approval:
   tested for real.
 - ✅ **Fixed:** sheet prices now show as `24.00`, not `24`. Checked on the real sheet;
   a second real run also appended to Observations (8 rows), and nothing was overwritten.
-- **`REVIEW.md`:** an untracked file in the repo root that wasn't written in these sessions.
-  It's left alone and uncommitted (last changed 12:13, reviewing `b3ceeb1`).
+- **`REVIEW.md`:** written by your reviewer and now gitignored. Its session 4 review
+  (`fe7f693`, CHANGES NEEDED) has been acted on: must-fix 1 in `5aac81e`, should-fix items in
+  `1c71b97`. A `/loop` checks it every 30 minutes for a new review.
 - **Needed for session 5:**
   - a GitHub repository (public or private) and a remote; `gh` isn't installed
   - the spec's open question: GitHub Actions (free, public repo) or a small paid host
