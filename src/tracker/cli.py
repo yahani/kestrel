@@ -281,7 +281,10 @@ def history(
         match = matches[0]
         rows = store.history(match.id, limit)
 
-    my_price = f", my price {match.my_price}" if match.my_price is not None else ""
+    # A product removed from config may belong to a site that's gone too.
+    currency = next((site.currency for site in cfg.sites if site.name == match.site), None)
+    shown = format_money(match.my_price, currency, pad=True)
+    my_price = f", my price {shown}" if match.my_price is not None else ""
     inactive = " (no longer in config)" if not match.active else ""
     typer.echo(f"{match.url}{inactive}")
     typer.echo(f"site {match.site}, sku {match.my_sku or '-'}{my_price}")

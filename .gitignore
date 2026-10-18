@@ -31,3 +31,6 @@ mock_site/state.json
 
 # Local demo config with a real recipient
 mock_site/demo-email.yaml
+
+# Written by the reviewer, not part of the build
+REVIEW.md

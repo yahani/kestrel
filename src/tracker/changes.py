@@ -24,9 +24,16 @@ ChangeKind = Literal[
 _DISPLAY_SYMBOLS = {"USD": "$", "GBP": "£", "EUR": "€", "JPY": "¥", "INR": "₹"}
 
 
-def format_money(amount: Decimal | None, currency: str | None) -> str:
+# Currencies without minor units; everything else is shown with at least 2 decimals.
+_NO_MINOR_UNITS = {"JPY", "KRW"}
+
+
+def format_money(amount: Decimal | None, currency: str | None, pad: bool = False) -> str:
+    """`pad` shows at least the currency's minor units ("23.0" -> "$23.00"), never fewer."""
     if amount is None:
         return "-"
+    if pad and currency and currency not in _NO_MINOR_UNITS and amount.as_tuple().exponent > -2:
+        amount = amount.quantize(Decimal("0.01"))
     if currency in _DISPLAY_SYMBOLS:
         return f"{_DISPLAY_SYMBOLS[currency]}{amount}"
     return f"{currency} {amount}" if currency else str(amount)

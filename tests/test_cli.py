@@ -208,7 +208,7 @@ def test_history_shows_newest_first(shop_cli):
     assert result.exit_code == 0, result.output
     lines = result.output.splitlines()
     assert lines[0] == "http://127.0.0.1:8000/product/blue-mug"
-    assert lines[1] == "site rival-x, sku MUG-BLUE, my price 23.0"
+    assert lines[1] == "site rival-x, sku MUG-BLUE, my price $23.00"
     rows = [line for line in lines if line[:4].isdigit()]  # rows start with the timestamp
     assert len(rows) == 2
     assert "$19.50" in rows[0] and "out_of_stock" in rows[0]

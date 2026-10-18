@@ -261,3 +261,19 @@ def test_my_price_shown_with_competitor_precision():
 def test_format_money(amount, currency, expected):
     value = Decimal(amount) if amount is not None else None
     assert format_money(value, currency) == expected
+
+
+@pytest.mark.parametrize(
+    ("amount", "currency", "expected"),
+    [
+        ("23.0", "USD", "$23.00"),
+        ("11", "GBP", "£11.00"),
+        ("21.5", "EUR", "€21.50"),
+        ("49.999", "USD", "$49.999"),  # never rounds away precision
+        ("1299", "JPY", "¥1299"),  # no minor units
+        ("1299.0", "KRW", "KRW 1299.0"),
+        ("12.5", None, "12.5"),
+    ],
+)
+def test_format_money_padded_to_minor_units(amount, currency, expected):
+    assert format_money(Decimal(amount), currency, pad=True) == expected

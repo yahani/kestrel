@@ -20,7 +20,7 @@ _Last updated: 2026-10-18, end of session 4._
 | F9 | Export to Sheets | ✅ done (real export to Google Sheets verified 2026-10-18) | `sheets.py` | Service account from `GOOGLE_SERVICE_ACCOUNT_JSON`. Appends each run's observations to "Observations" and rewrites "Latest" (one row per active product, with an `undercuts_me` column). Creates missing tabs with a frozen header. RAW writes, so a competitor title can't run as a formula. Accepts the sheet ID or its URL. Price columns are formatted `0.00`. Tested against a fake whose method signatures are checked against gspread 6.2.1, and against a real sheet: run `20261018T100321Z-318c90` wrote 4 rows, and Latest matched the database with 0 mismatches. |
 | F10 | Schedule | ⏳ session 5 | — | CI workflow (lint + tests) exists; the daily cron workflow doesn't yet. |
 | F11 | CLI | ✅ done | `cli.py`, `pipeline.py` | `run [--dry-run]`, `check-config` (also warns about missing secrets for enabled channels), `test-selectors <url> [--html] [--save]`, `history <url\|sku\|url part> [--limit]`. `--dry-run` previews the digest, saves nothing and sends nothing. Secrets are read from `.env` next to the config or in the current folder; real env vars win. |
-| F12 | Health report | ✅ done | `report.py` | Summary (checked, ok, failed, changes, seconds). A site is failing in a run when **all** its products fail; at 2 runs in a row → "selectors may have changed" alert, sent **once** (when the streak hits 2), then still listed while it lasts. |
+| F12 | Health report | ✅ done | `report.py` | Summary (checked, ok, failed, changes, seconds). A site is failing in a run when **all** its products fail; at 2 runs in a row → an alert whose advice depends on why it failed (parse errors → "selectors may have changed"; fetch, robots or blocking → "unreachable, blocking us or disallowing us in robots.txt"; mixed → check both), sent **once** (when the streak hits 2), then still listed while it lasts. |
 
 ### Session log
 
@@ -33,7 +33,7 @@ _Last updated: 2026-10-18, end of session 4._
 
 ## 2. Test results
 
-Run on 2026-10-18 with `uv run pytest --cov=tracker` (after the review's must-fix):
+Run on 2026-10-18 with `uv run pytest --cov=tracker` (after the review's should-fix items):
 
 | Suite | Tests | Result |
 |---|---|---|
@@ -42,14 +42,14 @@ Run on 2026-10-18 with `uv run pytest --cov=tracker` (after the review's must-fi
 | `test_parse.py` | 85 | ✅ pass |
 | `test_cli.py` | 38 | ✅ pass |
 | `test_store.py` | 29 | ✅ pass |
-| `test_changes.py` | 39 | ✅ pass |
+| `test_changes.py` | 46 | ✅ pass |
 | `test_mock_site.py` | 18 | ✅ pass |
 | `test_pipeline.py` | 14 | ✅ pass |
-| `test_report.py` | 8 | ✅ pass |
+| `test_report.py` | 13 | ✅ pass |
 | `test_alerts.py` | 39 | ✅ pass |
 | `test_sheets.py` | 21 | ✅ pass |
 | `test_carryover.py` | 9 | ✅ pass |
-| **Total** | **367** | **✅ all pass** |
+| **Total** | **379** | **✅ all pass** |
 
 Coverage: 100% on every module in `src/tracker/` (spec target is 80%). Excluded: the
 Playwright loader and `sheets.open_spreadsheet`, which need a real browser or real Google
@@ -94,6 +94,15 @@ Session 4 is done. Session 5 needs a plan and your approval:
 - Final secrets scan of the whole history.
 - ✅ **Fixed (REVIEW.md must-fix 1):** a failed digest send no longer loses the alert.
   Tests written first: 7 of the 9 new end-to-end tests fail on the previous commit.
+  Checked by hand: the real mock shop with a local SMTP server stopped, then restarted. The
+  failed run exited 1; the next run sent 1 email with the undercut under "From earlier runs
+  that couldn't be sent", dated 10:13 UTC; the run after that sent nothing.
+- ✅ **REVIEW.md should-fix items:**
+  - Site-health advice now depends on the failure type.
+  - `history` shows `my price $23.00`, not `23.0`.
+  - `REVIEW.md` is in `.gitignore`.
+  - Deferred: Latest is cleared before it's rewritten (a failed write leaves it empty until
+    the next run), and the float note is now in ARCHITECTURE.md.
 
 **By hand, session 4** (2026-10-18, real mock server + local SMTP server, real `smtplib`):
 - Run 1: 4 ok, no email.

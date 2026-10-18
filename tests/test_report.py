@@ -5,6 +5,7 @@ import httpx
 import pytest
 
 from tests.conftest import MOCK_CONFIG_FILE
+from tracker import report as report_module
 from tracker.config import load_config
 from tracker.pipeline import run_once
 from tracker.report import SITE_FAILURE_RUNS, SiteHealth, build_report
@@ -115,3 +116,26 @@ def test_first_runs_failing_count_from_the_start(mock_shop, store):
     break_site(mock_shop)
     run_and_report(mock_shop, store)
     assert run_and_report(mock_shop, store).new_site_alerts != ()
+
+
+@pytest.mark.parametrize(
+    ("statuses", "advice"),
+    [
+        (("parse_error",), report_module.ADVICE_SELECTORS),
+        (("skipped_robots",), report_module.ADVICE_UNREACHABLE),
+        (("blocked", "http_error"), report_module.ADVICE_UNREACHABLE),
+        (("http_error", "parse_error"), report_module.ADVICE_MIXED),
+    ],
+)
+def test_site_health_advice_depends_on_why_it_failed(statuses, advice):
+    health = SiteHealth("rival-x", 2, statuses)
+    assert health.describe() == f"rival-x failed 2 runs in a row ({', '.join(statuses)}): {advice}"
+
+
+def test_advice_wording():
+    assert "selectors may have changed" in report_module.ADVICE_SELECTORS
+    assert (
+        "unreachable, blocking us or disallowing us in robots.txt"
+        in report_module.ADVICE_UNREACHABLE
+    )
+    assert "fail to load or parse" in report_module.ADVICE_MIXED

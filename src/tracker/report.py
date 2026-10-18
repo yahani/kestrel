@@ -12,6 +12,11 @@ from tracker.store import Store
 # failing runs in a row its selectors have probably broken (or the site changed or blocks us).
 SITE_FAILURE_RUNS = 2
 
+# What to check depends on why the site failed.
+ADVICE_SELECTORS = "selectors may have changed; check a page with `tracker test-selectors <url>`"
+ADVICE_UNREACHABLE = "the site is unreachable, blocking us or disallowing us in robots.txt"
+ADVICE_MIXED = "pages fail to load or parse; check the site, then `tracker test-selectors <url>`"
+
 
 @dataclass(frozen=True)
 class SiteHealth:
@@ -25,10 +30,14 @@ class SiteHealth:
         return self.failed_runs == SITE_FAILURE_RUNS
 
     def describe(self) -> str:
-        return (
-            f"{self.site} failed {self.failed_runs} runs in a row ({', '.join(self.statuses)}): "
-            f"selectors may have changed; check a page with `tracker test-selectors <url>`"
-        )
+        if set(self.statuses) == {"parse_error"}:
+            advice = ADVICE_SELECTORS
+        elif "parse_error" not in self.statuses:
+            advice = ADVICE_UNREACHABLE
+        else:
+            advice = ADVICE_MIXED
+        statuses = ", ".join(self.statuses)
+        return f"{self.site} failed {self.failed_runs} runs in a row ({statuses}): {advice}"
 
 
 @dataclass(frozen=True)
