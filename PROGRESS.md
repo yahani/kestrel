@@ -120,6 +120,14 @@ All five build sessions are done. What's left:
       with no outputs, so the save step is skipped.
     - A restore writes to a temp file first, so it never leaves a 0-byte database.
     - A save refuses to write fewer observations than were restored.
+  - Verified on GitHub (run 39121212626): restored 40 observations and saved 60, `data` is
+    still 1 commit, and the log artifact has 0 email addresses.
+  - ✅ **Should-fix items:**
+    - README warns to use a private repo for real products, since the `data` branch is
+      public, and explains the 60-day schedule pause.
+    - `ci_config.py` prints a usage line.
+    - The `fetch.contact` Gmail in `mock_site/tracker-config.yaml` was your deliberate choice
+      (session 2), so it's left as it is.
 - **Waiting on GitHub:** the first scheduled Daily run, 2026-10-19 06:17 UTC.
 - **Waiting on you:** a review of session 5 (see the session report), and the portfolio
   deliverables above.

@@ -110,6 +110,15 @@ The workflow tracks the products in `demo/books-sandbox.yaml`, which are 20 book
 practice site. Point `CONFIG` in the workflow at your own config to track real
 competitors. [docs/SETUP.md](docs/SETUP.md) has the commands for setting the secrets.
 
+> **Before tracking real products, use a private repository.** In a public repo, anyone can
+> download the `data` branch's database, which holds your own prices (`my_price`) and every
+> competitor observation. Private repos are free at this volume too: about 2 Actions
+> minutes a day against 2,000 a month.
+>
+> **GitHub turns off scheduled workflows in public repos after 60 days without activity**
+> and emails the repo owner. To turn it back on, go to **Actions → Daily run → Enable
+> workflow**, or run `gh workflow enable daily.yml`. Any commit also resets the 60 days.
+
 ## Project docs
 
 - [docs/SETUP.md](docs/SETUP.md): Gmail, Google Sheets, Slack and GitHub Actions setup.
