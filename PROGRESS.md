@@ -73,7 +73,7 @@ Tests make no network calls: real HTTP is blocked in `tests/conftest.py`.
 
 **Spec acceptance criteria: end to end, by hand**
 
-- [ ] `tracker run` on the books sandbox stores correct title, price and stock for 20 products. Not run yet (the example config has 1 product); planned for session 5.
+- [x] `tracker run` on the books sandbox stores correct title, price and stock for 20 products. Checked 2026-10-18 with `demo/books-sandbox.yaml` (run `20261018T103642Z-274e4f`, 100.6 s, 21 requests): all 20 stored titles, prices, stock and quantities match the catalogue listing page, which is an independent source, with 0 mismatches.
 - [x] Changing two prices and one stock level on the mock site produces one digest with exactly those three changes. Checked 2026-10-18 with the real mock server and a local SMTP server: exactly 1 email, 3 changes.
 - [x] Running twice with no changes sends no alert (same check: runs 1 and 3 sent nothing).
 - [x] Email digest arrives and reads clearly on a phone. Sent through Gmail on 2026-10-18; you confirmed it arrived and reads fine on your phone.
@@ -95,8 +95,8 @@ Session 5, **approved 2026-10-18** with these decisions: **public** repo `yahani
   - Every HTTP request, each change, and a `run_finished` record with counts and delivery results.
   - A dry run writes no log.
 - Weekly dependency update check (spec, "Security").
-- Final README pass and setup guide (the 15-minute fresh-clone check), demo script, and the
-  20-product books sandbox check.
+- ✅ 20-product books sandbox check (`demo/books-sandbox.yaml`, also the scheduled demo).
+- Final README pass and setup guide (the 15-minute fresh-clone check), demo script.
 - Final secrets scan of the whole history.
 - ✅ **Fixed (REVIEW.md must-fix 1):** a failed digest send no longer loses the alert.
   Tests written first: 7 of the 9 new end-to-end tests fail on the previous commit.
