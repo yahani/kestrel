@@ -34,14 +34,14 @@ _Last updated: 2026-10-18, session 5 in progress._
 
 ## 2. Test results
 
-Run on 2026-10-18 with `uv run pytest --cov=tracker` (session 5, after the Latest fix):
+Run on 2026-10-18 with `uv run pytest --cov=tracker` (session 5, after JSON-lines logs):
 
 | Suite | Tests | Result |
 |---|---|---|
-| `test_config.py` | 36 | ✅ pass |
+| `test_config.py` | 37 | ✅ pass |
 | `test_fetch.py` | 32 | ✅ pass |
 | `test_parse.py` | 85 | ✅ pass |
-| `test_cli.py` | 38 | ✅ pass |
+| `test_cli.py` | 41 | ✅ pass |
 | `test_store.py` | 29 | ✅ pass |
 | `test_changes.py` | 46 | ✅ pass |
 | `test_mock_site.py` | 18 | ✅ pass |
@@ -50,7 +50,8 @@ Run on 2026-10-18 with `uv run pytest --cov=tracker` (session 5, after the Lates
 | `test_alerts.py` | 39 | ✅ pass |
 | `test_sheets.py` | 23 | ✅ pass |
 | `test_carryover.py` | 9 | ✅ pass |
-| **Total** | **381** | **✅ all pass** |
+| `test_logs.py` | 7 | ✅ pass |
+| **Total** | **392** | **✅ all pass** |
 
 Coverage: 100% on every module in `src/tracker/` (spec target is 80%). Excluded: the
 Playwright loader and `sheets.open_spreadsheet`, which need a real browser or real Google
@@ -88,7 +89,11 @@ Session 5, **approved 2026-10-18** with these decisions: **public** repo `yahani
 - **F10** GitHub Actions daily cron + manual trigger, with secrets from repository secrets.
   Needs a decision on where the SQLite history lives between runs (Actions runners start
   empty).
-- Structured JSON-lines logs kept for 30 days (spec, "Reliability").
+- ✅ Structured JSON-lines logs (spec, "Reliability"), in `logs.py`:
+  - One `logs/tracker-YYYY-MM-DD.jsonl` file per day, deleted after `logs.keep_days` (30).
+  - Each line has `ts`, `level`, `logger`, `msg` and fields.
+  - Every HTTP request, each change, and a `run_finished` record with counts and delivery results.
+  - A dry run writes no log.
 - Weekly dependency update check (spec, "Security").
 - Final README pass and setup guide (the 15-minute fresh-clone check), demo script, and the
   20-product books sandbox check.

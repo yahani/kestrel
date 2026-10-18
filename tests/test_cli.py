@@ -483,3 +483,55 @@ def test_load_env_reads_dotenv_next_to_config(tmp_path, monkeypatch):
     assert os.environ["SMTP_HOST"] == "from-config-dir"  # config folder first
     assert os.environ["SMTP_USER"] == "cwd-user"  # then the current folder
     assert os.environ["SMTP_PASSWORD"] == "real-env-wins"  # never overrides real env
+
+
+# --- JSON-lines logs (spec: Reliability) ------------------------------------------------
+
+
+@pytest.fixture
+def _close_logs():
+    yield
+    from tracker import logs
+
+    logs.close()
+
+
+def log_lines(config):
+    import json
+
+    files = sorted((config.parent / "logs").glob("tracker-*.jsonl"))
+    return files, [json.loads(line) for f in files for line in f.read_text().splitlines()]
+
+
+def test_run_writes_a_json_lines_log(shop_cli, _close_logs):
+    shop, config = shop_cli
+    invoke("run", "-c", config)
+    shop.set("blue-mug", price="19.50")
+    invoke("run", "-c", config)
+
+    files, lines = log_lines(config)
+    assert len(files) == 1
+    finished = [line for line in lines if line["msg"] == "run_finished"]
+    assert len(finished) == 2
+    assert finished[1]["checked"] == 4
+    assert finished[1]["changes"] == 1
+    assert finished[1]["failed"] == 0
+    [change] = [line for line in lines if line["msg"] == "change"]
+    assert change["kind"] == "price_down"
+    assert change["url"] == "http://127.0.0.1:8000/product/blue-mug"
+    assert any(line["logger"] == "httpx" for line in lines)  # every request is on record
+
+
+def test_dry_run_writes_no_log(shop_cli, _close_logs):
+    _, config = shop_cli
+    invoke("run", "-c", config, "--dry-run")
+    assert not (config.parent / "logs").exists()
+
+
+def test_log_dir_and_retention_come_from_config(shop_cli, tmp_path, _close_logs):
+    _, config = shop_cli
+    data = yaml.safe_load(config.read_text())
+    data["logs"] = {"dir": str(tmp_path / "elsewhere"), "keep_days": 7}
+    config.write_text(yaml.safe_dump(data, sort_keys=False))
+    invoke("run", "-c", config)
+    assert list((tmp_path / "elsewhere").glob("tracker-*.jsonl"))

@@ -227,3 +227,10 @@ def test_site_for_url():
     assert config.site_for_url("https://books.toscrape.com/catalogue/x").name == "books-sandbox"
     assert config.site_for_url("https://www.web-scraping.dev/product/9").name == "scraping-dev"
     assert config.site_for_url("https://unknown.example/x") is None
+
+
+def test_logs_defaults_and_bounds(example_data, write_config):
+    config = load_config(EXAMPLE_CONFIG)
+    assert (config.logs.dir, config.logs.keep_days) == ("logs", 30)
+    example_data["logs"] = {"keep_days": 0}
+    assert "logs.keep_days:" in error_for(write_config(example_data))

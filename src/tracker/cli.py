@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 from pathlib import Path
 from typing import Annotated
@@ -9,7 +10,7 @@ from typing import Annotated
 import typer
 from dotenv import load_dotenv
 
-from tracker import alerts, sheets
+from tracker import alerts, logs, sheets
 from tracker.alerts import Delivery, build_digest, missing_secrets, notify, should_send
 from tracker.changes import format_money
 from tracker.config import Config, ConfigError, load_config
@@ -18,6 +19,8 @@ from tracker.parse import parse_page
 from tracker.pipeline import run_once
 from tracker.report import build_report
 from tracker.store import Observation, Store
+
+log = logging.getLogger(__name__)
 
 app = typer.Typer(
     help="Track competitor prices and stock, and alert when something changes.",
@@ -85,10 +88,14 @@ def check_config(config: ConfigOption = DEFAULT_CONFIG) -> None:
         typer.echo(f"! {problem}")
 
 
+def _relative_to_config(config_path: Path, value: str) -> Path:
+    path = Path(value).expanduser()
+    return path if path.is_absolute() else config_path.parent / path
+
+
 def _db_path(config_path: Path, cfg: Config) -> Path:
     """The database path from config, relative to the config file's folder."""
-    path = Path(cfg.database)
-    return path if path.is_absolute() else config_path.parent / path
+    return _relative_to_config(config_path, cfg.database)
 
 
 @app.command()
@@ -109,6 +116,15 @@ def run(
     """
     cfg = _load_or_exit(config)
     _load_env(config)
+    if not dry_run:  # a dry run writes nothing, logs included
+        logs.setup(_relative_to_config(config, cfg.logs.dir), keep_days=cfg.logs.keep_days)
+    try:
+        _run(config, cfg, dry_run)
+    finally:
+        logs.close()
+
+
+def _run(config: Path, cfg: Config, dry_run: bool) -> None:
     db = _db_path(config, cfg)
     store = Store.scratch_copy(db) if dry_run else Store.open(db)
     with store, _make_fetcher(cfg) as fetcher:
@@ -161,6 +177,30 @@ def run(
     elif not sent.digests:
         typer.echo("digest: not sent (nothing changed)")
     deliveries += sent.deliveries
+    for change in report.changes:
+        log.info(
+            "change",
+            extra={"fields": {"run_id": result.run_id, "kind": change.kind,
+                              "url": change.product.url, "text": change.describe()}},
+        )  # fmt: skip
+    log.info(
+        "run_finished",
+        extra={
+            "fields": {
+                "run_id": result.run_id,
+                "checked": report.checked,
+                "succeeded": report.succeeded,
+                "failed": report.failed,
+                "changes": len(report.changes),
+                "failing_sites": [s.site for s in report.failing_sites],
+                "carried": {c: len(p) for c, p in sent.carried.items() if p},
+                "deliveries": [
+                    {"channel": d.channel, "ok": d.ok, "detail": d.detail} for d in deliveries
+                ],
+                "seconds": round(report.seconds, 1),
+            }
+        },
+    )
     for delivery in deliveries:
         mark = "✓" if delivery.ok else "✗"
         typer.echo(f"{delivery.channel}: {mark} {delivery.detail}")

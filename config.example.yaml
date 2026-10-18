@@ -47,3 +47,7 @@ sheets:
   spreadsheet_id: ""                # the sheet's ID or full URL; share it with the service account
   observations_tab: Observations    # every check is appended here
   latest_tab: Latest                # rewritten each run: one row per product
+
+logs:
+  dir: logs                         # JSON-lines, one file per day, relative to this file
+  keep_days: 30

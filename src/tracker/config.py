@@ -149,6 +149,11 @@ class Fetch(_Strict):
         return f"price-tracker/{__version__} (+mailto:{self.contact})"
 
 
+class Logs(_Strict):
+    dir: str = Field(default="logs", min_length=1, description="Relative to the config file")
+    keep_days: int = Field(default=30, ge=1, le=3650)
+
+
 class Config(_Strict):
     database: str = Field(
         default="tracker.db", min_length=1, description="SQLite file, relative to the config file"
@@ -158,6 +163,7 @@ class Config(_Strict):
     products: list[Product] = Field(min_length=1, max_length=MAX_PRODUCTS)
     alerts: Alerts = Field(default_factory=Alerts)
     sheets: Sheets = Field(default_factory=Sheets)
+    logs: Logs = Field(default_factory=Logs)
 
     @model_validator(mode="after")
     def _cross_checks(self) -> Config:
