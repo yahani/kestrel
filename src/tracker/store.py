@@ -83,7 +83,7 @@ def _dec(value: str | None) -> Decimal | None:
 
 
 def _text(value: Decimal | None) -> str | None:
-    return str(value) if value is not None else None
+    return format(value, "f") if value is not None else None  # "100", never "1E+2"
 
 
 class Store:
@@ -157,6 +157,8 @@ class Store:
 
     def find_products(self, query: str) -> list[ProductRow]:
         """Products whose URL or SKU equals `query`, or whose URL contains it."""
+        if not query.strip():
+            return []
         rows = self.conn.execute(
             """
             SELECT * FROM products
@@ -213,11 +215,19 @@ class Store:
         )
         return [self._observation(row) for row in rows]
 
-    def previous(self, current: Observation, ok_only: bool = False) -> Observation | None:
-        """The observation of the same product just before `current` (optionally only `ok`)."""
+    def previous(
+        self, current: Observation, ok_only: bool = False, known_stock: bool = False
+    ) -> Observation | None:
+        """The observation of the same product just before `current`.
+
+        `ok_only` skips failed observations; `known_stock` also skips ones whose stock
+        status is `unknown`.
+        """
         sql = "SELECT * FROM observations WHERE product_id = ? AND id < ?"
-        if ok_only:
+        if ok_only or known_stock:
             sql += " AND status = 'ok'"
+        if known_stock:
+            sql += " AND stock_status IN ('in_stock', 'out_of_stock')"
         row = self.conn.execute(
             sql + " ORDER BY id DESC LIMIT 1", (current.product_id, current.id)
         ).fetchone()

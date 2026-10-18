@@ -202,3 +202,39 @@ def test_price_drop_while_already_below_my_price_keeps_flag():
 def test_matching_my_price_is_not_undercut():
     [change] = detect(ok("22.00"), ok("24.00"), product=UNDERCUT_PRODUCT)
     assert change.undercut is False
+
+
+# --- edge cases ------------------------------------------------------------------------
+
+
+def test_stock_compared_with_last_known_stock_status():
+    # in_stock -> unknown -> out_of_stock: still an out_of_stock change.
+    changes = detect_changes(
+        PRODUCT,
+        ok(stock="out_of_stock"),
+        previous=ok(stock="unknown"),
+        previous_ok=ok(stock="unknown"),
+        min_change_percent=THRESHOLD,
+        previous_known_stock=ok(stock="in_stock"),
+    )
+    assert kinds(changes) == ["out_of_stock"]
+
+
+def test_undercut_needs_same_currency_as_my_price():
+    # my_price is in the site's currency (USD); a EUR price can't be compared with it.
+    old, new = ok("24.00", currency="EUR"), ok("19.50", currency="EUR")
+    [change] = detect_changes(UNDERCUT_PRODUCT, new, old, old, THRESHOLD, my_currency="USD")
+    assert change.kind == "price_down"
+    assert change.undercut is False
+
+    product = ProductRow(1, "rival-x", "http://shop/x", None, Decimal("49.95"), True)
+    small_old, small_new = ok("50.00", currency="EUR"), ok("49.90", currency="EUR")
+    assert (
+        detect_changes(product, small_new, small_old, small_old, THRESHOLD, my_currency="USD") == []
+    )
+
+
+def test_undercut_with_matching_currency():
+    old, new = ok("24.00"), ok("19.50")
+    [change] = detect_changes(UNDERCUT_PRODUCT, new, old, old, THRESHOLD, my_currency="USD")
+    assert change.undercut is True

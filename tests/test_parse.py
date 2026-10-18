@@ -222,3 +222,11 @@ def test_normalise_price_prefers_numbers_next_to_currency():
 
 def test_normalise_price_only_percentages_is_no_price():
     assert normalise_price("Save 15%") == (None, None)
+
+
+@pytest.mark.parametrize("price", ["£0.00", "£0"])
+def test_zero_price_is_a_parse_error(price):
+    html = f'<div class="product_main"><h1>X</h1><p class="price_color">{price}</p></div>'
+    page = parse_page(html, BOOKS)
+    assert page.status == "parse_error"
+    assert page.error == f"price {price!r} is not a positive amount"

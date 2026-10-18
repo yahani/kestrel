@@ -80,12 +80,18 @@ def detect_changes(
     previous: Observation | None,
     previous_ok: Observation | None,
     min_change_percent: Decimal,
+    *,
+    previous_known_stock: Observation | None = None,
+    my_currency: str | None = None,
 ) -> list[Change]:
     """Changes between `current` and the last successful observation before it.
 
     `previous` is the observation just before `current` (any status) and is only used to
-    tell a new failure from a continuing one. The first successful observation of a product
-    produces no changes.
+    tell a new failure from a continuing one. Stock is compared with
+    `previous_known_stock` (the last good observation whose stock was in or out of stock)
+    when given, so an `unknown` in between doesn't hide a change. `my_currency` is the
+    currency `my_price` is in; undercuts are only flagged when the competitor uses it too.
+    The first successful observation of a product produces no changes.
     """
     if not current.ok:
         if previous is None or previous.ok:
@@ -101,7 +107,8 @@ def detect_changes(
     changes: list[Change] = []
     old, new = previous_ok, current
     title = new.title or old.title
-    my_price = product.my_price
+    comparable = my_currency is None or new.currency == my_currency
+    my_price = product.my_price if comparable else None
 
     if old.price is not None and new.price is not None:
         if old.currency != new.currency:
@@ -153,9 +160,10 @@ def detect_changes(
                 )
             )
 
-    if old.stock_status == "in_stock" and new.stock_status == "out_of_stock":
+    old_stock = (previous_known_stock or old).stock_status
+    if old_stock == "in_stock" and new.stock_status == "out_of_stock":
         changes.append(Change("out_of_stock", product, title))
-    elif old.stock_status == "out_of_stock" and new.stock_status == "in_stock":
+    elif old_stock == "out_of_stock" and new.stock_status == "in_stock":
         changes.append(Change("back_in_stock", product, title))
 
     if old.title and new.title and old.title != new.title:

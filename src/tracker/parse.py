@@ -192,6 +192,9 @@ def parse_page(html: str, site: Site) -> ParsedPage:
         page.price, detected = normalise_price(raw["price"])
         if page.price is None:
             problems.append(f"could not read a price from {raw['price']!r}")
+        elif page.price <= 0:
+            problems.append(f"price {raw['price']!r} is not a positive amount")
+            page.price = None
         if detected and detected != site.currency:
             log.warning(
                 "site %s: price %r looks like %s but site currency is %s; using %s",

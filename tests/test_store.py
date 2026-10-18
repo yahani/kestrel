@@ -180,3 +180,25 @@ def test_scratch_copy_without_existing_db(tmp_path):
     with Store.scratch_copy(path) as scratch:
         assert scratch.products() == []
     assert not path.exists()
+
+
+def test_previous_with_known_stock(store):
+    product = store.sync_products(TWO_PRODUCTS)[0]
+    known = store.record(product.id, obs("r1", stock_status="in_stock"))
+    store.record(product.id, obs("r2", stock_status="unknown"))
+    store.record(product.id, obs("r3", status="http_error"))
+    current = store.record(product.id, obs("r4", stock_status="out_of_stock"))
+    assert store.previous(current, ok_only=True, known_stock=True) == known
+
+
+@pytest.mark.parametrize("query", ["", "   "])
+def test_find_products_empty_query_matches_nothing(store, query):
+    store.sync_products(TWO_PRODUCTS)
+    assert store.find_products(query) == []
+
+
+def test_decimals_are_stored_in_plain_notation(store):
+    product = store.sync_products(TWO_PRODUCTS)[0]
+    store.record(product.id, obs(price=Decimal("1E+2")))
+    raw = store.conn.execute("SELECT price FROM observations").fetchone()[0]
+    assert raw == "100"
