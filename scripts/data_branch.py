@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import re
 import sqlite3
 import subprocess
 import sys
@@ -31,8 +32,23 @@ README = (
 LS_REMOTE_MISSING = 2  # `git ls-remote --exit-code` when no ref matches
 
 
+_TOKEN = re.compile(r"(x-access-token:)[^@\s'\"]+@")
+
+
 class Failure(Exception):
     pass
+
+
+def _redact(text: str, remote: str) -> str:
+    """Remove the remote URL and any token from git's output before it's shown."""
+    return _TOKEN.sub(r"\1***@", text.replace(remote, "<remote>"))
+
+
+def _why(result: subprocess.CompletedProcess, remote: str) -> str:
+    """git's own error message, made safe to print, so a failure on Actions can be diagnosed."""
+    message = result.stderr if isinstance(result.stderr, str) else result.stderr.decode()
+    lines = [line.strip() for line in _redact(message, remote).splitlines() if line.strip()]
+    return f" (git: {' / '.join(lines[-3:])})" if lines else ""
 
 
 def _git(*args: str, cwd: Path | None = None) -> subprocess.CompletedProcess[str]:
@@ -58,24 +74,28 @@ def _set_outputs(**values: object) -> None:
 
 
 def restore(remote: str, branch: str, db: Path) -> None:
-    found = _git("ls-remote", "--exit-code", "--heads", remote, branch)
+    # The full ref, so refs/heads/feature/data doesn't count as "data".
+    found = _git("ls-remote", "--exit-code", remote, f"refs/heads/{branch}")
     if found.returncode == LS_REMOTE_MISSING:
         print(f"no {branch} branch yet: this first run starts with empty history")
         _set_outputs(restored="new", observations=0)
         return
     if found.returncode != 0:
-        raise Failure(f"could not reach the remote to look for the {branch} branch")
+        raise Failure(
+            f"could not reach the remote to look for the {branch} branch{_why(found, remote)}"
+        )
 
     with tempfile.TemporaryDirectory() as tmp:
         repo = Path(tmp) / "repo.git"
         _git("init", "-q", "--bare", str(repo))
-        if _git("fetch", "-q", "--depth=1", remote, branch, cwd=repo).returncode != 0:
-            raise Failure(f"could not fetch the {branch} branch")
+        fetched = _git("fetch", "-q", "--depth=1", remote, f"refs/heads/{branch}", cwd=repo)
+        if fetched.returncode != 0:
+            raise Failure(f"could not fetch the {branch} branch{_why(fetched, remote)}")
         shown = subprocess.run(
             ["git", "show", f"FETCH_HEAD:{DB_NAME}"], cwd=repo, capture_output=True
         )
         if shown.returncode != 0:
-            raise Failure(f"the {branch} branch has no {DB_NAME}")
+            raise Failure(f"the {branch} branch has no {DB_NAME}{_why(shown, remote)}")
         staged = Path(tmp) / DB_NAME
         staged.write_bytes(shown.stdout)
         observations = _observations(staged)  # refuse anything that isn't our database
@@ -110,8 +130,11 @@ def save(remote: str, branch: str, db: Path, min_observations: int) -> None:
             ("push", "-q", "-f", remote, f"HEAD:refs/heads/{branch}"),
         ]
         for step in steps:
-            if _git(*step, cwd=work).returncode != 0:
-                raise Failure(f"git {step[0]} failed while saving the {branch} branch")
+            result = _git(*step, cwd=work)
+            if result.returncode != 0:
+                raise Failure(
+                    f"git {step[0]} failed while saving the {branch} branch{_why(result, remote)}"
+                )
 
     print(f"saved {db.stat().st_size} bytes to {branch} ({observations} observations)")
 

@@ -34,7 +34,7 @@ _Last updated: 2026-10-18, end of session 5. All 12 requirements are built; one 
 
 ## 2. Test results
 
-Run on 2026-10-18 with `uv run pytest --cov=tracker` (session 5, after review must-fixes 1 and 2):
+Run on 2026-10-18 with `uv run pytest --cov=tracker` (after the approved review's should-fix items):
 
 | Suite | Tests | Result |
 |---|---|---|
@@ -52,8 +52,8 @@ Run on 2026-10-18 with `uv run pytest --cov=tracker` (session 5, after review mu
 | `test_carryover.py` | 9 | ✅ pass |
 | `test_logs.py` | 7 | ✅ pass |
 | `test_ci_config.py` | 7 | ✅ pass |
-| `test_data_branch.py` | 13 | ✅ pass |
-| **Total** | **415** | **✅ all pass** |
+| `test_data_branch.py` | 16 | ✅ pass |
+| **Total** | **418** | **✅ all pass** |
 
 Coverage: 100% on every module in `src/tracker/` (spec target is 80%). Excluded: the
 Playwright loader and `sheets.open_spreadsheet`, which need a real browser or real Google
@@ -128,6 +128,16 @@ All five build sessions are done. What's left:
     - `ci_config.py` prints a usage line.
     - The `fetch.contact` Gmail in `mock_site/tracker-config.yaml` was your deliberate choice
       (session 2), so it's left as it is.
+- **Review of `6893824`: APPROVED** (no must-fix).
+  - ✅ **Should-fix items done:**
+    - The restore matches only `refs/heads/data`, so a `feature/data` branch is no longer
+      mistaken for it.
+    - Git's own error message is shown on failure, with the remote and any token redacted.
+    - Checked read-only against the real `data` branch: restored 60 observations.
+  - Not done (optional): pinning third-party actions to commit SHAs. Dependabot keeps the
+    version tags current.
+  - Its next instruction, step 1: confirm the first scheduled run after 2026-10-19 06:17
+    UTC. A one-off check is scheduled for 12:20 Colombo time (06:50 UTC).
 - **Waiting on GitHub:** the first scheduled Daily run, 2026-10-19 06:17 UTC.
 - **Waiting on you:** a review of session 5 (see the session report), and the portfolio
   deliverables above.

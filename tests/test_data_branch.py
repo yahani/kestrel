@@ -209,3 +209,39 @@ def test_workflow_saves_only_after_a_successful_restore():
     assert "steps.restore.outputs.restored != ''" in save["if"]
     assert "scripts/data_branch.py save" in save["run"]
     assert "steps.restore.outputs.observations" in save["run"]
+
+
+def test_branch_with_same_suffix_is_not_mistaken_for_data(remote, tmp_path):
+    # Review should-fix: `ls-remote --heads origin data` also matched refs/heads/feature/data,
+    # so every run failed with "could not fetch". Only refs/heads/data counts.
+    push_branch(remote, tmp_path, {"tracker.db": b"x"}, branch="feature/data")
+    db = tmp_path / "tracker.db"
+    result, outputs = script("restore", "--remote", remote, "--db", db, tmp_path=tmp_path)
+    assert result.returncode == 0, result.stderr
+    assert outputs == {"restored": "new", "observations": "0"}
+
+
+def test_git_errors_are_shown_with_the_remote_redacted(tmp_path):
+    db = tmp_path / "tracker.db"
+    make_db(db, 1)
+    secret = tmp_path / "x-access-token:ghs_SECRET123@host" / "repo.git"
+    result, _ = script("save", "--remote", secret, "--db", db, "--min-observations", 0,
+                       tmp_path=tmp_path)  # fmt: skip
+    assert result.returncode != 0
+    assert "git: " in result.stderr  # git's own message, so failures can be diagnosed
+    assert "ghs_SECRET123" not in result.stderr
+
+
+def test_token_in_any_url_is_redacted():
+    sys.path.insert(0, str(SCRIPT.parent))
+    try:
+        import data_branch
+    finally:
+        sys.path.pop(0)
+    text = "fatal: unable to access 'https://x-access-token:ghs_abc@github.com/o/r.git/': 403"
+    assert data_branch._redact(text, remote="other") == (
+        "fatal: unable to access 'https://x-access-token:***@github.com/o/r.git/': 403"
+    )
+    assert data_branch._redact("fatal: '/tmp/r.git' does not exist", remote="/tmp/r.git") == (
+        "fatal: '<remote>' does not exist"
+    )
