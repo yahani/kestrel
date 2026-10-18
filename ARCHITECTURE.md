@@ -67,7 +67,9 @@ flowchart TD
 | `report.py` | Run summary and site health: a site whose products **all** fail 2 runs in a row is flagged once. | Sends anything |
 | `alerts.py` | Builds one digest per run (text, HTML, Slack blocks), adds anything a channel missed, sends it by SMTP and/or Slack webhook, and marks what got through. | Reads secrets from config, or raises on a failed send |
 | `sheets.py` | Appends the run's observations and rewrites the "Latest" tab through a service account. | Lets a competitor's text become a formula (writes RAW) |
-| `cli.py` | `check-config`, `test-selectors`, `run [--dry-run]`, `history`; loads `.env`; wires report → Sheets → digest. | Holds business logic |
+| `datasync.py` | `tracker data restore/save`: the history database on a git branch between scheduled runs. | Starts empty unless the branch is truly missing; shows the remote URL or token |
+| `ci.py` | `tracker ci-config`: a run's config from a committed one plus secrets. | Prints a secret value |
+| `cli.py` | `check-config`, `test-selectors`, `run [--dry-run]`, `history`, `data`, `ci-config`, `--version`; loads `.env`; wires report → Sheets → digest. | Holds business logic |
 
 ## Config (F1)
 
@@ -377,7 +379,7 @@ flowchart TD
     restore -- "any other error" --> stop(["fail: no outputs,<br/>so nothing is saved"])
     copy -- "no / unreadable tracker.db" --> stop
     copy -- ok --> build
-    empty --> build["scripts/ci_config.py<br/>email/Sheets on from secrets"]
+    empty --> build["tracker ci-config<br/>email/Sheets on from secrets"]
     build --> check[tracker check-config]
     check --> run[tracker run]
     run --> save["save tracker.db to data<br/>(even if run failed, only if restore succeeded,<br/>never fewer observations than restored)"]
@@ -391,16 +393,16 @@ flowchart TD
   holds every observation.
 - **Saving runs even if the tracker exits 1:** a failed email still records which runs are
   waiting to be sent, and the next run carries them over.
-- **Never overwriting history with an empty database** (`scripts/data_branch.py`):
+- **Never overwriting history with an empty database** (`tracker data restore|save`, in `datasync.py`):
   - Only a branch that's missing, per `ls-remote` exit 2, starts empty.
   - An unreachable remote, a missing or unreadable `tracker.db`, or a save with fewer
     observations than were restored all fail without pushing.
   - The token-bearing remote URL is never printed.
 - **Recipients are never printed or logged:** delivery details give a count ("sent to 1
-  recipient"), and SMTP errors are scrubbed of addresses. On Actions, `ci_config.py` masks
+  recipient"), and SMTP errors are scrubbed of addresses. On Actions, `tracker ci-config` masks
   each recipient separately, because log artifacts of a public repo are downloadable.
 - **Secrets are never committed:** `DIGEST_EMAIL_TO`, `SMTP_*`, `SHEETS_SPREADSHEET_ID` and
-  `GOOGLE_SERVICE_ACCOUNT_KEY` are repository secrets. `ci_config.py` reports only on/off
+  `GOOGLE_SERVICE_ACCOUNT_KEY` are repository secrets. `tracker ci-config` reports only on/off
   and counts. The service-account key is written to the runner's temp folder with mode 600.
 - **What it tracks:** the products in `demo/books-sandbox.yaml`, 20 books on a practice site.
   Point `CONFIG` at another committed config to track real competitors.

@@ -10,7 +10,7 @@ from typing import Annotated
 import typer
 from dotenv import load_dotenv
 
-from tracker import alerts, logs, sheets
+from tracker import __version__, alerts, ci, datasync, logs, sheets
 from tracker.alerts import Delivery, build_digest, missing_secrets, notify, should_send
 from tracker.changes import format_money
 from tracker.config import Config, ConfigError, load_config
@@ -27,6 +27,30 @@ app = typer.Typer(
     no_args_is_help=True,
     add_completion=False,
 )
+data_app = typer.Typer(
+    help="Keep the history database on a git branch between scheduled runs.",
+    no_args_is_help=True,
+)
+app.add_typer(data_app, name="data")
+
+
+def _print_version(value: bool) -> None:
+    if value:
+        typer.echo(f"price-tracker {__version__}")
+        raise typer.Exit()
+
+
+@app.callback()
+def main(
+    version: Annotated[
+        bool,
+        typer.Option(
+            "--version", callback=_print_version, is_eager=True, help="Show the version and exit."
+        ),
+    ] = False,
+) -> None:
+    """Track competitor prices and stock, and alert when something changes."""
+
 
 ConfigOption = Annotated[Path, typer.Option("--config", "-c", help="Path to the config file.")]
 DEFAULT_CONFIG = Path("config.yaml")
@@ -335,3 +359,82 @@ def history(
     typer.echo(f"{'fetched (UTC)':<25} {'status':<14} {'price':>14}  {'stock':<18} title / error")
     for observation in rows:
         typer.echo(_history_line(observation))
+
+
+# --- scheduled runs: history branch and config from secrets ---------------------------------
+
+RemoteOption = Annotated[
+    str, typer.Option("--remote", help="Git remote URL (may contain a token; never shown).")
+]
+BranchOption = Annotated[str, typer.Option("--branch", help="Branch that holds the database.")]
+DbOption = Annotated[Path, typer.Option("--db", help="Local path of tracker.db.")]
+
+
+def _github_outputs(outputs: dict[str, str]) -> None:
+    """Make step outputs available to later GitHub Actions steps."""
+    if outputs and (path := os.environ.get("GITHUB_OUTPUT")):
+        with open(path, "a", encoding="utf-8") as f:
+            f.writelines(f"{key}={value}\n" for key, value in outputs.items())
+
+
+@data_app.command("restore")
+def data_restore(remote: RemoteOption, db: DbOption, branch: BranchOption = "data") -> None:
+    """Fetch tracker.db from the branch. Only a missing branch starts empty history.
+
+    Sets the step outputs `restored` (true/new) and `observations`. Fails, setting nothing,
+    if the remote can't be reached or the branch has no readable database.
+    """
+    try:
+        outcome = datasync.restore(remote, branch, db)
+    except datasync.DataSyncError as exc:
+        typer.echo(f"✗ {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+    typer.echo(outcome.message)
+    _github_outputs(outcome.outputs)
+
+
+@data_app.command("save")
+def data_save(
+    remote: RemoteOption,
+    db: DbOption,
+    min_observations: Annotated[
+        int, typer.Option("--min-observations", help="Refuse to save fewer than this.")
+    ],
+    branch: BranchOption = "data",
+) -> None:
+    """Replace the branch with one commit holding tracker.db."""
+    try:
+        outcome = datasync.save(remote, branch, db, min_observations)
+    except datasync.DataSyncError as exc:
+        typer.echo(f"✗ {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+    typer.echo(outcome.message)
+
+
+@app.command("ci-config")
+def ci_config(
+    source: Annotated[Path, typer.Argument(help="Committed config (no secrets).")],
+    target: Annotated[Path, typer.Argument(help="Where to write the run's config.")],
+) -> None:
+    """Build a scheduled run's config: email on from DIGEST_EMAIL_TO, Sheets from
+    SHEETS_SPREADSHEET_ID. Put TARGET next to SOURCE so relative paths still resolve.
+    Secret values are never printed; on GitHub Actions each recipient is masked.
+    """
+    if not source.is_file():
+        typer.echo(f"✗ {source}: config file not found", err=True)
+        raise typer.Exit(code=1)
+    built = ci.build(source, os.environ)
+    if os.environ.get("GITHUB_ACTIONS") == "true":
+        for address in built.recipients:  # mask each one, not only the comma-separated secret
+            typer.echo(f"::add-mask::{address}")
+
+    staged = target.with_name(f".{target.name}.tmp")
+    staged.write_text(ci.dump(built), encoding="utf-8")
+    try:
+        load_config(staged)  # never leave an invalid config where `tracker run` would find it
+    except ConfigError as exc:
+        staged.unlink()
+        typer.echo(f"✗ {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+    staged.replace(target)
+    typer.echo(built.summary())

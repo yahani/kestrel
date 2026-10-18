@@ -18,7 +18,7 @@ _Last updated: 2026-10-18, end of session 5. All 12 requirements are built; one 
 | F7 | Compare with own price | ✅ done | `changes.py` | Price changes carry an `undercut` flag when the new price is below `my_price`. A separate `undercut` change fires only when a move under the threshold crosses below `my_price`, so one event is never reported twice. Only flagged when the competitor's currency matches the site currency (`my_price` is assumed to be in it). |
 | F8 | Alert | ✅ done (real send through Gmail accepted) | `alerts.py` | One digest per run as text + HTML email (sections: Undercutting you, Price changes, Stock, Other, Couldn't check, Site health) and a Slack Block Kit payload. Competitor text is escaped. Not sent when nothing changed unless `always_send_summary` (a newly failing site also triggers a send). SMTP via STARTTLS/SSL (trusting the system store **plus certifi**, since python.org's macOS Python ships with no root certificates) with secrets from env/`.env`; Slack sender built, off in config. `run` sends it; exits 1 if a channel fails. Delivery details give a **count, never addresses** (`sent to 1 recipient`), and SMTP errors are scrubbed of addresses, because logs are public artifacts on Actions. **A digest that fails to send is carried into the next one that gets through, exactly once, per channel**, under "From earlier runs that couldn't be sent" with the original run's time (append-only `runs` + `deliveries` tables). |
 | F9 | Export to Sheets | ✅ done (real export to Google Sheets verified 2026-10-18) | `sheets.py` | Service account from `GOOGLE_SERVICE_ACCOUNT_JSON`. Appends each run's observations to "Observations" and rewrites "Latest" (one row per active product, with an `undercuts_me` column). Creates missing tabs with a frozen header. RAW writes, so a competitor title can't run as a formula. Accepts the sheet ID or its URL. Price columns are formatted `0.00`. Tested against a fake whose method signatures are checked against gspread 6.2.1, and against a real sheet: run `20261018T100321Z-318c90` wrote 4 rows, and Latest matched the database with 0 mismatches. |
-| F10 | Schedule | 🟡 manual trigger ✅; first scheduled run due 2026-10-19 06:17 UTC | `.github/workflows/daily.yml`, `scripts/ci_config.py` | Daily cron at 06:17 UTC plus a manual **Run workflow** button. One run at a time. Restores `tracker.db` from the `data` branch, and saves it back even when the run fails, but only after a successful restore (force-pushed as a single commit, so the repo doesn't grow). Email and Sheets come from repository secrets; the recipient is never committed. Logs are uploaded as an artifact kept 30 days. Two manual runs passed (39120192167, 39120377564): the first started empty and saved 40 KB to `data`; the second restored it and saved 49 KB. The DB now holds 2 runs and 40 observations, and `data` is still 1 commit. |
+| F10 | Schedule | 🟡 manual trigger ✅; first scheduled run due 2026-10-19 06:17 UTC | `.github/workflows/daily.yml`, `tracker ci-config`, `tracker data` | Daily cron at 06:17 UTC plus a manual **Run workflow** button. One run at a time. Restores `tracker.db` from the `data` branch, and saves it back even when the run fails, but only after a successful restore (force-pushed as a single commit, so the repo doesn't grow). Email and Sheets come from repository secrets; the recipient is never committed. Logs are uploaded as an artifact kept 30 days. Two manual runs passed (39120192167, 39120377564): the first started empty and saved 40 KB to `data`; the second restored it and saved 49 KB. The DB now holds 2 runs and 40 observations, and `data` is still 1 commit. |
 | F11 | CLI | ✅ done | `cli.py`, `pipeline.py` | `run [--dry-run]`, `check-config` (also warns about missing secrets for enabled channels), `test-selectors <url> [--html] [--save]`, `history <url\|sku\|url part> [--limit]`. `--dry-run` previews the digest, saves nothing and sends nothing. Secrets are read from `.env` next to the config or in the current folder; real env vars win. |
 | F12 | Health report | ✅ done | `report.py` | Summary (checked, ok, failed, changes, seconds). A site is failing in a run when **all** its products fail; at 2 runs in a row → an alert whose advice depends on why it failed (parse errors → "selectors may have changed"; fetch, robots or blocking → "unreachable, blocking us or disallowing us in robots.txt"; mixed → check both), sent **once** (when the streak hits 2), then still listed while it lasts. |
 
@@ -34,14 +34,14 @@ _Last updated: 2026-10-18, end of session 5. All 12 requirements are built; one 
 
 ## 2. Test results
 
-Run on 2026-10-18 with `uv run pytest --cov=tracker` (after the approved review's should-fix items):
+Run on 2026-10-18 with `uv run pytest --cov=tracker` (client template step 1: `tracker data` / `ci-config` commands):
 
 | Suite | Tests | Result |
 |---|---|---|
 | `test_config.py` | 37 | ✅ pass |
 | `test_fetch.py` | 32 | ✅ pass |
 | `test_parse.py` | 85 | ✅ pass |
-| `test_cli.py` | 42 | ✅ pass |
+| `test_cli.py` | 45 | ✅ pass |
 | `test_store.py` | 29 | ✅ pass |
 | `test_changes.py` | 46 | ✅ pass |
 | `test_mock_site.py` | 18 | ✅ pass |
@@ -51,9 +51,9 @@ Run on 2026-10-18 with `uv run pytest --cov=tracker` (after the approved review'
 | `test_sheets.py` | 23 | ✅ pass |
 | `test_carryover.py` | 9 | ✅ pass |
 | `test_logs.py` | 7 | ✅ pass |
-| `test_ci_config.py` | 7 | ✅ pass |
-| `test_data_branch.py` | 16 | ✅ pass |
-| **Total** | **418** | **✅ all pass** |
+| `test_ci_command.py` | 10 | ✅ pass |
+| `test_datasync.py` | 19 | ✅ pass |
+| **Total** | **427** | **✅ all pass** |
 
 Coverage: 100% on every module in `src/tracker/` (spec target is 80%). Excluded: the
 Playwright loader and `sheets.open_spreadsheet`, which need a real browser or real Google
@@ -153,3 +153,28 @@ All five build sessions are done. What's left:
 - **`REVIEW.md`:** written by your reviewer and gitignored. The session 4 review was acted
   on (`5aac81e`, `1c71b97`). A `/loop` (job `f6f48c88`) checks for a new review every 30
   minutes while this session is open.
+
+## 5. Client template
+
+Goal: this repo stays public (code + demo on practice sites). Each client gets a **private**
+repo created from a template. Their config, `tracker.db` (on its `data` branch) and run logs
+live only there. The template installs the tracker from this repo, pinned to a release tag.
+Approved 2026-10-18. Decisions:
+- The scripts become CLI commands, and the scripts are deleted.
+- The privacy guard asks the GitHub API.
+- A placeholder guard stops runs on an unedited config.
+- `TRACKER_VERSION` is a separate file.
+- v1.0.0 gets a GitHub Release.
+- A private test client repo will be created.
+
+- [x] `tracker data restore|save`, `tracker ci-config` and `tracker --version` added; the
+  scripts are deleted and `daily.yml` uses the commands. Tests first (29 ported, plus
+  fetch-failure and version tests). Coverage 100%.
+- [ ] Version from package metadata only; installs cleanly with `uv tool install git+…@tag`.
+- [ ] Release v1.0.0: `pyproject.toml` version and `CHANGELOG.md` (tag and Release only with
+  your OK).
+- [ ] Template repo at `../price-tracker-client-template`: config, workflows, guards,
+  `CLIENT_SETUP.md`.
+- [ ] Push this repo and the tag (your OK) → create the private template repo (your OK) →
+  test client repo and one run by hand.
+- [ ] ARCHITECTURE.md diagram, README warning → `CLIENT_SETUP.md`.

@@ -552,3 +552,31 @@ def test_recipient_never_printed_or_logged(email_cli, _close_logs):
     everything = first.output + second.output + json.dumps(lines)
     assert "secret-recipient@example.com" not in everything
     assert SMTP_ENV["SMTP_USER"] not in everything
+
+
+# --- version (client repos print which release they installed) ---------------------------
+
+
+def test_version_option_matches_package_metadata():
+    from importlib.metadata import version
+
+    import tracker
+
+    result = runner.invoke(app, ["--version"])
+    assert result.exit_code == 0
+    assert result.output.strip() == f"price-tracker {version('price-tracker')}"
+    assert tracker.__version__ == version("price-tracker")
+
+
+def test_version_matches_pyproject():
+    import tomllib
+
+    import tracker
+
+    pyproject = tomllib.loads((Path(__file__).parent.parent / "pyproject.toml").read_text())
+    assert tracker.__version__ == pyproject["project"]["version"]
+
+
+def test_help_lists_data_and_ci_config():
+    result = runner.invoke(app, ["--help"])
+    assert "data" in result.output and "ci-config" in result.output
