@@ -10,6 +10,8 @@ import typer
 from tracker.config import Config, ConfigError, load_config
 from tracker.fetch import Fetcher
 from tracker.parse import parse_page
+from tracker.pipeline import run_once
+from tracker.store import Observation, Store
 
 app = typer.Typer(
     help="Track competitor prices and stock, and alert when something changes.",
@@ -27,11 +29,6 @@ def _load_or_exit(path: Path) -> Config:
     except ConfigError as exc:
         typer.echo(f"✗ {exc}", err=True)
         raise typer.Exit(code=1) from exc
-
-
-def _not_implemented(session: int) -> None:
-    typer.echo(f"Not implemented yet (planned for build session {session}).", err=True)
-    raise typer.Exit(code=1)
 
 
 def _on_off(enabled: bool) -> str:
@@ -58,6 +55,12 @@ def check_config(config: ConfigOption = DEFAULT_CONFIG) -> None:
     typer.echo(f"  sheets:   {_on_off(cfg.sheets.enabled)}")
 
 
+def _db_path(config_path: Path, cfg: Config) -> Path:
+    """The database path from config, relative to the config file's folder."""
+    path = Path(cfg.database)
+    return path if path.is_absolute() else config_path.parent / path
+
+
 @app.command()
 def run(
     config: ConfigOption = DEFAULT_CONFIG,
@@ -68,9 +71,30 @@ def run(
         ),
     ] = False,
 ) -> None:
-    """Run the full daily pipeline: fetch, parse, store, detect changes, alert."""
-    _load_or_exit(config)
-    _not_implemented(session=4)
+    """Run the daily pipeline: fetch, parse, store, detect changes.
+
+    Alerts, Sheets export and the health report are added in build session 4; for now the
+    changes are printed.
+    """
+    cfg = _load_or_exit(config)
+    db = _db_path(config, cfg)
+    store = Store.scratch_copy(db) if dry_run else Store.open(db)
+    with store, _make_fetcher(cfg) as fetcher:
+        result = run_once(cfg, store, fetcher)
+
+    typer.echo(
+        f"run {result.run_id}: {len(result.observations)} products, {result.succeeded} ok, "
+        f"{result.failed} failed, {len(result.changes)} change"
+        f"{'' if len(result.changes) == 1 else 's'} ({result.seconds:.1f}s)"
+    )
+    for change in result.changes:
+        typer.echo(f"  • {change.describe()}")
+    failures = [(p, o) for p, o in result.observations if not o.ok]
+    if failures:
+        typer.echo("failed this run:")
+        for product, observation in failures:
+            typer.echo(f"  ✗ {product.url}: {observation.status} ({observation.error})")
+    typer.echo("(dry run: nothing was saved)" if dry_run else f"saved to {db}")
 
 
 def _make_fetcher(cfg: Config) -> Fetcher:
@@ -138,11 +162,53 @@ def test_selectors(
     typer.echo("✓ parsed ok")
 
 
+def _history_line(o: Observation) -> str:
+    price = f"{o.price} {o.currency}" if o.price is not None else "-"
+    stock = o.stock_status or "-"
+    if o.stock_qty is not None:
+        stock += f" ({o.stock_qty})"
+    detail = o.title if o.ok else o.error
+    return f"{o.fetched_at:<25} {o.status:<14} {price:>14}  {stock:<18} {detail or ''}"
+
+
 @app.command()
 def history(
-    product: Annotated[str, typer.Argument(help="Product URL or your SKU.")],
+    product: Annotated[str, typer.Argument(help="Product URL, your SKU, or part of the URL.")],
     config: ConfigOption = DEFAULT_CONFIG,
+    limit: Annotated[int, typer.Option("--limit", "-n", min=1, help="Rows to show.")] = 20,
 ) -> None:
-    """Show stored price and stock history for one product."""
-    _load_or_exit(config)
-    _not_implemented(session=3)
+    """Show stored price and stock history for one product, newest first."""
+    if not product.strip():
+        typer.echo("✗ give a product URL, SKU or part of a URL", err=True)
+        raise typer.Exit(code=1)
+    cfg = _load_or_exit(config)
+    db = _db_path(config, cfg)
+    if not db.is_file():
+        typer.echo(f"✗ no history yet ({db} doesn't exist): run `tracker run` first", err=True)
+        raise typer.Exit(code=1)
+
+    with Store.open(db) as store:
+        matches = store.find_products(product)
+        if not matches:
+            typer.echo(f"✗ no product matches {product!r}", err=True)
+            raise typer.Exit(code=1)
+        if len(matches) > 1:
+            typer.echo(f"✗ {len(matches)} products match {product!r}; be more specific:", err=True)
+            for p in matches:
+                typer.echo(f"  {p.my_sku or '-':<14} {p.url}", err=True)
+            raise typer.Exit(code=1)
+
+        match = matches[0]
+        rows = store.history(match.id, limit)
+
+    my_price = f", my price {match.my_price}" if match.my_price is not None else ""
+    inactive = " (no longer in config)" if not match.active else ""
+    typer.echo(f"{match.url}{inactive}")
+    typer.echo(f"site {match.site}, sku {match.my_sku or '-'}{my_price}")
+    if not rows:
+        typer.echo("no observations yet")
+        return
+    typer.echo("")
+    typer.echo(f"{'fetched (UTC)':<25} {'status':<14} {'price':>14}  {'stock':<18} title / error")
+    for observation in rows:
+        typer.echo(_history_line(observation))

@@ -19,7 +19,7 @@ _Last updated: 2026-10-18, session 3 in progress._
 | F8 | Alert | ⏳ session 4 | — | |
 | F9 | Export to Sheets | ⏳ session 4 | — | |
 | F10 | Schedule | ⏳ session 5 | — | CI workflow (lint + tests) exists; the daily cron workflow doesn't yet. |
-| F11 | CLI | 🟡 partial | `cli.py` | `check-config` and `test-selectors` (with `--html`, `--save`) done. `run` (session 4) and `history` (session 3) are stubs that exit 1. |
+| F11 | CLI | 🟡 partial | `cli.py`, `pipeline.py` | `check-config`, `test-selectors` (`--html`, `--save`) and `history <url\|sku\|url part> [--limit]` done. `run [--dry-run]` fetches, stores and **prints** changes; alerts, Sheets and the health report hook in during session 4. `--dry-run` works on an in-memory copy, so nothing is written. |
 | F12 | Health report | ⏳ session 4 | — | |
 
 ### Session log
@@ -32,18 +32,19 @@ _Last updated: 2026-10-18, session 3 in progress._
 
 ## 2. Test results
 
-Run on 2026-10-18 with `uv run pytest --cov=tracker` (after the edge-case fixes):
+Run on 2026-10-18 with `uv run pytest --cov=tracker` (after `history` and the pipeline):
 
 | Suite | Tests | Result |
 |---|---|---|
 | `test_config.py` | 36 | ✅ pass |
 | `test_fetch.py` | 32 | ✅ pass |
 | `test_parse.py` | 85 | ✅ pass |
-| `test_cli.py` | 16 | ✅ pass |
+| `test_cli.py` | 26 | ✅ pass |
 | `test_store.py` | 19 | ✅ pass |
-| `test_changes.py` | 31 | ✅ pass |
+| `test_changes.py` | 32 | ✅ pass |
 | `test_mock_site.py` | 18 | ✅ pass |
-| **Total** | **237** | **✅ all pass** |
+| `test_pipeline.py` | 14 | ✅ pass |
+| **Total** | **262** | **✅ all pass** |
 
 Coverage: 100% on `config.py`, `fetch.py`, `parse.py` and `cli.py` (spec target is 80%; the
 Playwright loader is excluded because it needs a real browser). `ruff check` and
@@ -58,7 +59,7 @@ Tests make no network calls: real HTTP is blocked in `tests/conftest.py`.
 - [x] Parsing works on saved fixtures from each demo site (books.toscrape.com, web-scraping.dev, mock shop)
 - [x] Change detection: up, down, below-threshold ignored, back in stock, out of stock, undercut, first observation (no alert)
 - [x] Invalid config produces a readable error naming the field
-- [x] A failed fetch is recorded and does not stop other products (fetch level; the run loop arrives in session 4)
+- [x] A failed fetch is recorded and does not stop other products (`test_pipeline.py`)
 - [x] robots.txt disallow is respected
 - [x] Test coverage ≥ 80% on parse, changes and config (`changes.py` doesn't exist yet)
 
@@ -71,7 +72,7 @@ Session 3 (approved), in this order:
 - ✅ **F5** SQLite store.
 - ✅ **F6** change detection.
 - ✅ **F7** undercut flag.
-- **F11** `tracker history <product>`.
+- ✅ **F11** `tracker history`, plus `run` printing changes (pipeline in `pipeline.py`).
 - ✅ Mock competitor shop (`mock_site/`): `python -m mock_site serve | list | set | reset`, plus an `/admin` page; its fixture is saved.
 
 ## 4. Blocked or waiting on you

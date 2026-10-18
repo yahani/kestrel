@@ -36,6 +36,14 @@ class Change:
     status: str | None = None  # on new_failure
     error: str | None = None
 
+    def _my_price(self) -> Decimal:
+        """my_price shown with the same decimals as the competitor ("23.0" -> "23.00")."""
+        mine, theirs = self.product.my_price, self.new_price
+        assert mine is not None and theirs is not None  # only used on undercut changes
+        return (
+            mine.quantize(theirs) if mine.as_tuple().exponent > theirs.as_tuple().exponent else mine
+        )
+
     def describe(self) -> str:
         name = self.title or self.product.url
         cur = f" {self.currency}" if self.currency else ""
@@ -47,7 +55,7 @@ class Change:
                     f"to {self.new_price}{cur} ({self.percent:+}%)"
                 )
                 if self.undercut:
-                    text += f", below your {self.product.my_price}{cur}"
+                    text += f", below your {self._my_price()}{cur}"
                 return text
             case "currency_changed":
                 return (
@@ -63,7 +71,7 @@ class Change:
             case "undercut":
                 return (
                     f"{self.product.site} now undercuts you on {name}: "
-                    f"{self.new_price}{cur} vs your {self.product.my_price}{cur}"
+                    f"{self.new_price}{cur} vs your {self._my_price()}{cur}"
                 )
             case "new_failure":
                 return f"{self.product.site}: could not check {name} ({self.status}: {self.error})"

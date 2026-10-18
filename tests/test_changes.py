@@ -238,3 +238,9 @@ def test_undercut_with_matching_currency():
     old, new = ok("24.00"), ok("19.50")
     [change] = detect_changes(UNDERCUT_PRODUCT, new, old, old, THRESHOLD, my_currency="USD")
     assert change.undercut is True
+
+
+def test_my_price_shown_with_competitor_precision():
+    product = ProductRow(1, "rival-x", "http://shop/x", None, Decimal("23.0"), True)
+    [change] = detect(ok("19.50"), ok("24.00"), product=product)
+    assert change.describe().endswith("below your 23.00 USD")

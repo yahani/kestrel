@@ -37,3 +37,54 @@ def write_config(tmp_path):
         return path
 
     return _write
+
+
+MOCK_CONFIG_FILE = ROOT / "mock_site" / "tracker-config.yaml"
+
+
+class MockShop:
+    """The mock competitor shop served in-process through httpx.MockTransport."""
+
+    def __init__(self, state: Path):
+        from mock_site import shop
+
+        self.shop = shop
+        self.state = state
+        self.overrides: dict[str, httpx.Response] = {}  # path -> forced response
+        shop.reset(state)
+
+    def set(self, slug: str, price: str | None = None, stock: int | None = None) -> None:
+        self.shop.update(slug, price, stock, path=self.state)
+
+    def handler(self, request: httpx.Request) -> httpx.Response:
+        path = request.url.path
+        if path in self.overrides:
+            return self.overrides[path]
+        if path == "/robots.txt":
+            return httpx.Response(200, text=self.shop.ROBOTS_TXT)
+        items = self.shop.load(self.state)
+        slug = path.removeprefix("/product/")
+        if path.startswith("/product/") and slug in items:
+            return httpx.Response(200, text=self.shop.render_product(items[slug]))
+        return httpx.Response(404)
+
+    def fetcher(self, cfg):
+        from tracker.fetch import Fetcher
+
+        client = httpx.Client(transport=httpx.MockTransport(self.handler))
+        return Fetcher(cfg.fetch, client=client, sleep=lambda _: None)
+
+
+@pytest.fixture
+def mock_shop(tmp_path) -> MockShop:
+    return MockShop(tmp_path / "shop-state.json")
+
+
+@pytest.fixture
+def mock_config_file(tmp_path) -> Path:
+    """The mock shop's tracker config, with its database in a temp folder."""
+    data = yaml.safe_load(MOCK_CONFIG_FILE.read_text())
+    data["database"] = str(tmp_path / "tracker.db")
+    path = tmp_path / "mock-config.yaml"
+    path.write_text(yaml.safe_dump(data, sort_keys=False))
+    return path
