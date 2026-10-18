@@ -133,6 +133,9 @@ Session 5, **approved 2026-10-18** with these decisions: **public** repo `yahani
 - **`REVIEW.md`:** written by your reviewer and now gitignored. Its session 4 review
   (`fe7f693`, CHANGES NEEDED) has been acted on: must-fix 1 in `5aac81e`, should-fix items in
   `1c71b97`. A `/loop` checks it every 30 minutes for a new review.
+- ✅ **GitHub:** https://github.com/yahani/price-tracker (public) is pushed. Before the push,
+  gitleaks scanned all 35 commits: no leaks. Nothing secret was ever tracked. The first CI
+  run on GitHub passed (run 39119445037).
 - **Decided 2026-10-18 (session 5):**
   - GitHub Actions, in a **public** repo `yahani/price-tracker` (a private repo would also be free at this volume).
   - History kept on a `data` branch.
