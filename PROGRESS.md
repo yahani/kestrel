@@ -13,7 +13,7 @@ _Last updated: 2026-10-18, session 3 in progress._
 | F2 | Fetch pages | ✅ done | `fetch.py` | httpx, timeout, 3 retries with 1/2/4 s backoff on top of the ≥5 s per-site delay, `Retry-After` honoured (cap 60 s). Optional Playwright browser mode (tested with a fake browser only). |
 | F3 | Respect robots.txt | ✅ done | `fetch.py` | Fetched once per site per run; `Crawl-delay` honoured; 401/403 → disallow; 5xx/unreachable → skip site. |
 | F4 | Parse | ✅ done | `parse.py` | Title, price (Decimal + currency), stock status + qty via config selectors. 36 price formats, 22 stock phrases tested. **Fixed in session 3:** price no longer picks up percentages, multi-buy counts, ratings or discount amounts; numbers next to a currency mark are preferred. |
-| F5 | Store | ⏳ session 3 | — | |
+| F5 | Store | ✅ done | `store.py` | `products` + append-only `observations` (UPDATE/DELETE blocked by triggers), prices stored as TEXT Decimals, status values checked by the DB. Products removed from config are marked inactive, history kept. `database:` path added to config. In-memory scratch copy for `--dry-run`. |
 | F6 | Detect changes | ⏳ session 3 | — | |
 | F7 | Compare with own price | ⏳ session 3 | — | |
 | F8 | Alert | ⏳ session 4 | — | |
@@ -32,7 +32,7 @@ _Last updated: 2026-10-18, session 3 in progress._
 
 ## 2. Test results
 
-Run on 2026-10-18 with `uv run pytest --cov=tracker` (after the price fix):
+Run on 2026-10-18 with `uv run pytest --cov=tracker` (after F5):
 
 | Suite | Tests | Result |
 |---|---|---|
@@ -40,7 +40,8 @@ Run on 2026-10-18 with `uv run pytest --cov=tracker` (after the price fix):
 | `test_fetch.py` | 32 | ✅ pass |
 | `test_parse.py` | 83 | ✅ pass |
 | `test_cli.py` | 16 | ✅ pass |
-| **Total** | **167** | **✅ all pass** |
+| `test_store.py` | 15 | ✅ pass |
+| **Total** | **182** | **✅ all pass** |
 
 Coverage: 100% on `config.py`, `fetch.py`, `parse.py` and `cli.py` (spec target is 80%; the
 Playwright loader is excluded because it needs a real browser). `ruff check` and
@@ -65,7 +66,7 @@ Session 3 (approved), in this order:
 
 - ✅ **F4 fix:** price picks the right number in promo text.
 
-- **F5** SQLite store: `products` and append-only `observations` tables, prices as Decimal.
+- ✅ **F5** SQLite store.
 - **F6** Change detection against the last successful observation, with the configurable threshold.
 - **F7** Undercut flag when a competitor goes below `my_price`.
 - **F11** `tracker history <product>`.

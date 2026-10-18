@@ -1,5 +1,7 @@
 # Copy to config.yaml and edit. Secrets go in environment variables, never here.
 
+database: tracker.db               # SQLite history, relative to this file
+
 fetch:
   contact: yahanihwgm@gmail.com   # sent in the User-Agent so site owners can reach you
   timeout_seconds: 20

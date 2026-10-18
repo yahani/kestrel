@@ -146,6 +146,9 @@ class Fetch(_Strict):
 
 
 class Config(_Strict):
+    database: str = Field(
+        default="tracker.db", min_length=1, description="SQLite file, relative to the config file"
+    )
     fetch: Fetch
     sites: list[Site] = Field(min_length=1, max_length=MAX_SITES)
     products: list[Product] = Field(min_length=1, max_length=MAX_PRODUCTS)
