@@ -207,8 +207,20 @@ Approved 2026-10-18. Decisions:
     job was skipped, and `data` was untouched (6 observations). Made **private** again
     straight after.
 - **Follow-ups:**
-  - GitHub warns that `actions/checkout@v4` runs on Node 20, which is deprecated. Dependabot
-    in both repos should propose v5.
+  - ✅ **Dependabot updates merged 2026-10-19:** 10 PRs across the three repos:
+    - `actions/checkout` 4 → 7, `actions/upload-artifact` 4 → 7, `astral-sh/setup-uv` 6 → 7,
+      and `gitleaks/gitleaks-action` 2 → 3 (this repo only).
+    - Release notes checked: the breaking changes are only the Node 20 → 24 runtime
+      (gitleaks v2 had already lost Node 20 support on hosted runners) and a `setup-uv`
+      input we don't use.
+    - `daily.yml` doesn't run on PRs, so each repo's updates were combined on a temporary
+      branch and Daily run was triggered by hand before merging:
+      - Demo run 39197151653: restored 80 observations, saved 100, logs uploaded, no Node 20
+        warning.
+      - Test client run 39198684457: guard ok, v1.0.0, restored 6, saved 9.
+    - After merging: CI on `main` passed here (39198617210), and Check config passed on
+      `main` in the test client (39198808175) and the template (39198845972). The temporary
+      branches are deleted, and no PRs are open.
   - The test repo's daily schedule now runs every day. To stop it:
     `gh workflow disable daily.yml -R yahani/test-client-tracker`. To remove the repo,
     delete it yourself; `gh` lacks the `delete_repo` scope.
