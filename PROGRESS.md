@@ -3,7 +3,7 @@
 Updated after every step. Requirement IDs refer to the spec (F1–F12). How the pieces fit
 together is in [ARCHITECTURE.md](ARCHITECTURE.md).
 
-_Last updated: 2026-10-18, end of session 5. All 12 requirements are built; one acceptance check waits on tomorrow's scheduled run._
+_Last updated: 2026-10-20. All 12 requirements are built and **every acceptance check in the spec is ticked**._
 
 ## 1. Done, by requirement
 
@@ -18,7 +18,7 @@ _Last updated: 2026-10-18, end of session 5. All 12 requirements are built; one 
 | F7 | Compare with own price | ✅ done | `changes.py` | Price changes carry an `undercut` flag when the new price is below `my_price`. A separate `undercut` change fires only when a move under the threshold crosses below `my_price`, so one event is never reported twice. Only flagged when the competitor's currency matches the site currency (`my_price` is assumed to be in it). |
 | F8 | Alert | ✅ done (real send through Gmail accepted) | `alerts.py` | One digest per run as text + HTML email (sections: Undercutting you, Price changes, Stock, Other, Couldn't check, Site health) and a Slack Block Kit payload. Competitor text is escaped. Not sent when nothing changed unless `always_send_summary` (a newly failing site also triggers a send). SMTP via STARTTLS/SSL (trusting the system store **plus certifi**, since python.org's macOS Python ships with no root certificates) with secrets from env/`.env`; Slack sender built, off in config. `run` sends it; exits 1 if a channel fails. Delivery details give a **count, never addresses** (`sent to 1 recipient`), and SMTP errors are scrubbed of addresses, because logs are public artifacts on Actions. **A digest that fails to send is carried into the next one that gets through, exactly once, per channel**, under "From earlier runs that couldn't be sent" with the original run's time (append-only `runs` + `deliveries` tables). |
 | F9 | Export to Sheets | ✅ done (real export to Google Sheets verified 2026-10-18) | `sheets.py` | Service account from `GOOGLE_SERVICE_ACCOUNT_JSON`. Appends each run's observations to "Observations" and rewrites "Latest" (one row per active product, with an `undercuts_me` column). Creates missing tabs with a frozen header. RAW writes, so a competitor title can't run as a formula. Accepts the sheet ID or its URL. Price columns are formatted `0.00`. Tested against a fake whose method signatures are checked against gspread 6.2.1, and against a real sheet: run `20261018T100321Z-318c90` wrote 4 rows, and Latest matched the database with 0 mismatches. |
-| F10 | Schedule | 🟡 manual trigger ✅; first scheduled run due 2026-10-19 06:17 UTC | `.github/workflows/daily.yml`, `tracker ci-config`, `tracker data` | Daily cron at 06:17 UTC plus a manual **Run workflow** button. One run at a time. Restores `tracker.db` from the `data` branch, and saves it back even when the run fails, but only after a successful restore (force-pushed as a single commit, so the repo doesn't grow). Email and Sheets come from repository secrets; the recipient is never committed. Logs are uploaded as an artifact kept 30 days. Two manual runs passed (39120192167, 39120377564): the first started empty and saved 40 KB to `data`; the second restored it and saved 49 KB. The DB now holds 2 runs and 40 observations, and `data` is still 1 commit. |
+| F10 | Schedule | ✅ done (manual and scheduled runs verified) | `.github/workflows/daily.yml`, `tracker ci-config`, `tracker data` | Daily cron at 06:17 UTC plus a manual **Run workflow** button. One run at a time. Restores `tracker.db` from the `data` branch, and saves it back even when the run fails, but only after a successful restore (force-pushed as a single commit, so the repo doesn't grow). Email and Sheets come from repository secrets; the recipient is never committed. Logs are uploaded as an artifact kept 30 days. Two manual runs passed (39120192167, 39120377564): the first started empty and saved 40 KB to `data`; the second restored it and saved 49 KB. The DB now holds 2 runs and 40 observations, and `data` is still 1 commit. |
 | F11 | CLI | ✅ done | `cli.py`, `pipeline.py` | `run [--dry-run]`, `check-config` (also warns about missing secrets for enabled channels), `test-selectors <url> [--html] [--save]`, `history <url\|sku\|url part> [--limit]`. `--dry-run` previews the digest, saves nothing and sends nothing. Secrets are read from `.env` next to the config or in the current folder; real env vars win. |
 | F12 | Health report | ✅ done | `report.py` | Summary (checked, ok, failed, changes, seconds). A site is failing in a run when **all** its products fail; at 2 runs in a row → an alert whose advice depends on why it failed (parse errors → "selectors may have changed"; fetch, robots or blocking → "unreachable, blocking us or disallowing us in robots.txt"; mixed → check both), sent **once** (when the streak hits 2), then still listed while it lasts. |
 
@@ -80,7 +80,9 @@ Tests make no network calls: real HTTP is blocked in `tests/conftest.py`.
 - [x] Running twice with no changes sends no alert (same check: runs 1 and 3 sent nothing).
 - [x] Email digest arrives and reads clearly on a phone. Sent through Gmail on 2026-10-18; you confirmed it arrived and reads fine on your phone.
 - [x] Google Sheet "Latest" tab matches the database. Checked 2026-10-18 by reading the real sheet back through the API: 4 rows, 0 mismatches on every field; headers frozen; prices are number cells.
-- [ ] GitHub Actions run succeeds on schedule and on manual trigger. **Manual: ✅** (2 runs on 2026-10-18, with history restored between them). **Scheduled: waiting** for the first cron run, 2026-10-19 06:17 UTC; GitHub can delay scheduled runs by some minutes.
+- [x] GitHub Actions run succeeds on schedule and on manual trigger.
+  - **Manual: ✅** several runs on 2026-10-18, with history restored between them.
+  - **Scheduled: ✅** first run `39257222911` on 2026-10-19. GitHub started it at 13:05 UTC, about 6h50m after the 06:17 cron time: scheduled runs are best-effort and can be delayed when GitHub is busy. It restored 100 observations, checked 20/20 and saved 120. `data` is still 1 commit, and the log artifact contains 0 email addresses.
 - [x] A fresh clone plus the README gets a stranger running in under 15 minutes. Checked 2026-10-18: cloned from GitHub into an empty folder with an **empty uv cache** and followed only the README quick start. Clone and install took 25 s, the tests 10 s, and the mock-shop demo with a dry-run digest preview 43 s: **78 s of commands** in total, and the clone stayed clean. (Assumes Python 3.12 and uv are installed; installing uv takes about a minute.)
 - [x] No secrets in the repository history. Final gitleaks scan on 2026-10-18 of all commits on `main` and `data`, re-run after the review fixes: no leaks. The public `data` branch database contains no secret-looking strings. CI repeats the full-history scan on every push.
 
@@ -138,7 +140,7 @@ All five build sessions are done. What's left:
     version tags current.
   - Its next instruction, step 1: confirm the first scheduled run after 2026-10-19 06:17
     UTC. A one-off check is scheduled for 12:20 Colombo time (06:50 UTC).
-- **Waiting on GitHub:** the first scheduled Daily run, 2026-10-19 06:17 UTC.
+- ✅ **First scheduled Daily run confirmed** (2026-10-19, run 39257222911). Your Mac was offline at the planned 12:20 check, so it was checked on 2026-10-20 instead.
 - **Waiting on you:** a review of session 5 (see the session report), and the portfolio
   deliverables above.
 - **Your accounts, all set up 2026-10-18:**
@@ -171,7 +173,7 @@ Approved 2026-10-18. Decisions:
   fetch-failure and version tests). Coverage 100%.
 - [x] The version comes from package metadata only. Installs cleanly with `uv tool install --python 3.12 git+…@<commit>`, from an empty cache and a throwaway tool folder. Every command works outside the repo; only the `tracker` package is installed. `--version` and the User-Agent both say 1.0.0. (Re-check from GitHub once the tag is pushed.)
 - [x] Release v1.0.0 prepared: `pyproject.toml` set to 1.0.0, and `CHANGELOG.md` written.
-  - [ ] Tag `v1.0.0` and its GitHub Release: waiting for your OK.
+  - [x] Tag `v1.0.0` and its GitHub Release: done 2026-10-18, with your OK.
 - [x] Template built locally at `../price-tracker-client-template`, as its own git repo
   with 3 commits; gitleaks is clean:
   - `config.yaml` with placeholders, marked as private client data.
