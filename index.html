@@ -1,0 +1,294 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Kestrel: competitor price alerts for online stores</title>
+<meta name="description" content="Kestrel checks your competitors' product pages daily and emails you when a price or stock level changes. Done-for-you setup.">
+<meta property="og:title" content="Kestrel: competitor price alerts for online stores">
+<meta property="og:description" content="Kestrel checks your competitors' product pages daily and emails you when a price or stock level changes. Done-for-you setup.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 30 30%22%3E%3Cpath d=%22M0 24 L30 6 L22 24 Z%22 fill=%22%23B4532A%22/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one calm reading column; the sample digest is the hero, rust only marks the undercut and the CTA. */
+:root {
+  --paper: #FAF8F5;
+  --surface: #FFFFFF;
+  --ink: #1F2430;
+  --slate: #5B7083;
+  --rust: #B4532A;
+  --line: #DED8CF;
+  --soft: #F1EDE6;
+  --placeholder: #FFF4E5;
+  --sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #16191F; --surface: #1F232B; --ink: #ECE8E1; --slate: #94A6B6;
+    --rust: #D9784F; --line: #333944; --soft: #242932; --placeholder: #3A2A1E;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #16191F; --surface: #1F232B; --ink: #ECE8E1; --slate: #94A6B6;
+  --rust: #D9784F; --line: #333944; --soft: #242932; --placeholder: #3A2A1E;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { margin: 0; }
+img { max-width: 100%; }
+body {
+  background: var(--paper); color: var(--ink);
+  font-family: var(--sans); font-size: 17px; line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+.wrap {
+  max-width: 760px; margin: 0 auto;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 32px 72px;
+  display: grid; gap: 72px;
+}
+h1, h2, h3 { text-wrap: balance; margin: 0; line-height: 1.2; }
+h1 { font-size: clamp(2rem, 6vw, 3.1rem); font-weight: 700; letter-spacing: -0.025em; }
+h2 { font-size: 1.6rem; font-weight: 650; letter-spacing: -0.015em; }
+h3 { font-size: 1.05rem; font-weight: 600; }
+p { margin: 0; }
+.muted { color: var(--slate); }
+.eyebrow { font-size: 0.78rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--slate); }
+section { display: grid; gap: 20px; }
+.prose { display: grid; gap: 14px; max-width: 62ch; }
+a { color: var(--rust); }
+a:focus-visible, button:focus-visible { outline: 2px solid var(--rust); outline-offset: 3px; }
+
+/* header */
+.top { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.mark { display: flex; align-items: center; gap: 10px; font-weight: 600; font-size: 1.35rem; letter-spacing: -0.01em; }
+.mark svg { width: 30px; height: 18px; }
+.top .tag { font-size: 0.9rem; color: var(--slate); }
+
+.hero { display: grid; gap: 22px; }
+.hero .lede { font-size: 1.2rem; color: var(--slate); max-width: 52ch; }
+
+/* digest mock */
+.digest { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+.digest .bar { background: var(--soft); border-bottom: 1px solid var(--line); padding: 10px 16px; display: flex; gap: 12px; align-items: baseline; flex-wrap: wrap; font-size: 0.82rem; color: var(--slate); }
+.digest .bar b { color: var(--ink); font-weight: 600; }
+.digest .body { padding: 20px; display: grid; gap: 16px; }
+.digest .subj { font-size: 1.15rem; font-weight: 650; }
+.grp { display: grid; gap: 6px; }
+.grp h4 { margin: 0; font-size: 0.85rem; font-weight: 600; }
+.row { padding-left: 14px; border-left: 3px solid transparent; font-variant-numeric: tabular-nums; }
+.row.hit { border-left-color: var(--rust); }
+.caption { font-size: 0.85rem; color: var(--slate); }
+
+/* video */
+.video { display: grid; gap: 14px; padding: 20px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+.vlink { color: var(--ink); text-decoration-color: var(--rust); text-underline-offset: 3px; }
+.video .play { display: flex; align-items: center; gap: 14px; }
+.video .dot { flex: none; width: 44px; height: 44px; border-radius: 50%; background: var(--ink); display: grid; place-items: center; }
+.video .dot svg { width: 16px; height: 16px; fill: var(--paper); margin-left: 3px; }
+.video ol { margin: 0; padding-left: 20px; display: grid; gap: 4px; color: var(--slate); font-size: 0.92rem; }
+.todo { font-family: var(--mono); font-size: 0.8rem; color: var(--rust); }
+
+/* how it works */
+.steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; list-style: none; margin: 0; padding: 0; }
+.steps li { display: grid; gap: 6px; align-content: start; padding-top: 14px; border-top: 2px solid var(--line); }
+.steps li:last-child { border-top-color: var(--rust); }
+.steps .n { font-family: var(--mono); font-size: 0.8rem; color: var(--slate); }
+.steps p { font-size: 0.95rem; color: var(--slate); }
+@media (max-width: 620px) { .steps { grid-template-columns: 1fr; } }
+
+/* results */
+.results { list-style: none; margin: 0; padding: 0; display: grid; border-top: 1px solid var(--line); }
+.results li { display: grid; grid-template-columns: 8.5rem minmax(0, 1fr); gap: 16px; padding-block: 14px; border-bottom: 1px solid var(--line); }
+.results .what { font-family: var(--mono); font-size: 0.82rem; color: var(--slate); padding-top: 3px; }
+@media (max-width: 520px) { .results li { grid-template-columns: 1fr; gap: 2px; } }
+
+/* pricing */
+.tiers { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.tier { display: grid; gap: 10px; align-content: start; padding: 18px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; }
+.tier .price { font-size: 1.9rem; font-weight: 700; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.tier .price small { font-size: 0.85rem; font-weight: 500; color: var(--slate); letter-spacing: 0; }
+.tier ul { margin: 0; padding-left: 18px; font-size: 0.93rem; display: grid; gap: 3px; }
+.tier .care { font-size: 0.88rem; color: var(--slate); border-top: 1px solid var(--line); padding-top: 10px; font-variant-numeric: tabular-nums; }
+@media (max-width: 680px) { .tiers { grid-template-columns: 1fr; } }
+
+.rules { margin: 0; padding-left: 20px; display: grid; gap: 8px; max-width: 62ch; }
+
+/* cta */
+.cta { display: grid; gap: 16px; padding: 28px 24px; border-radius: 12px; background: var(--ink); color: var(--paper); }
+.cta h2 { color: var(--paper); }
+.cta p { opacity: 0.85; max-width: 54ch; }
+.cta .slot { font-family: var(--mono); font-size: 0.82rem; color: var(--paper); border: 1px dashed currentColor; border-radius: 8px; padding: 10px 12px; opacity: 0.8; }
+.cta .accent { color: var(--rust); font-weight: 600; opacity: 1; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .cta { background: var(--soft); color: var(--ink); } :root:not([data-theme="light"]) .cta h2, :root:not([data-theme="light"]) .cta .slot { color: var(--ink); } }
+:root[data-theme="dark"] .cta { background: var(--soft); color: var(--ink); }
+:root[data-theme="dark"] .cta h2, :root[data-theme="dark"] .cta .slot { color: var(--ink); }
+
+.contact { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.email { color: inherit; text-decoration: none; font-family: var(--mono); font-size: 1rem; user-select: all; overflow-wrap: anywhere; padding: 8px 12px; border: 1px solid currentColor; border-radius: 8px; }
+#copy-email { font: 600 0.9rem var(--sans); padding: 9px 16px; border-radius: 8px; border: 0; background: var(--rust); color: #FFFFFF; cursor: pointer; }
+.cta .note { font-size: 0.9rem; }
+.mark .by { font-size: 0.9rem; font-weight: 400; color: var(--slate); letter-spacing: 0; }
+footer { font-size: 0.85rem; color: var(--slate); }
+</style>
+</head>
+
+<body>
+<div class="wrap">
+
+  <header class="top">
+    <div class="mark">
+      <svg viewBox="0 0 30 18" aria-hidden="true"><path d="M0 18 L30 0 L22 18 Z" fill="var(--rust)"/></svg>
+      kestrel <span class="by">by Yahani</span>
+    </div>
+    <span class="tag">Competitor price alerts for online stores</span>
+  </header>
+
+  <section class="hero">
+    <h1>Know when your competitors move.</h1>
+    <p class="lede">Kestrel checks your competitors' product pages once a day and sends you one short email when a price or stock level changes. I set it up for you, and you never log in to anything.</p>
+    <figure class="digest" style="margin:0" aria-label="Sample Kestrel email digest">
+      <div class="bar"><b>Kestrel</b><span>Competitor prices 21 Oct 2026: 3 changes, 1 undercut</span></div>
+      <div class="body">
+        <div class="subj">3 changes, 1 undercut</div>
+        <div class="grp">
+          <h4>Undercutting you</h4>
+          <div class="row hit">Harbor Home cut Blue Mug from $24.00 to $19.50 (−18.8%), below your $23.00</div>
+        </div>
+        <div class="grp">
+          <h4>Price changes</h4>
+          <div class="row">Harbor Home raised Green Teapot from $45.00 to $49.50 (+10.0%)</div>
+        </div>
+        <div class="grp">
+          <h4>Stock</h4>
+          <div class="row">Harbor Home is out of stock on Red Mug</div>
+        </div>
+      </div>
+    </figure>
+    <p class="caption">A real digest from a test run against a demo shop called Harbor Home. The shop and its prices are made up; the email is exactly what Kestrel sent.</p>
+  </section>
+
+  <section>
+    <span class="eyebrow">The problem</span>
+    <h2>Checking competitor prices by hand doesn't last</h2>
+    <div class="prose">
+      <p>Most small store owners know they should watch their competitors. In practice it means opening a dozen tabs every few days, and after a busy week it stops happening. Then a competitor drops a price or runs out of stock, and you find out from your sales numbers a week later.</p>
+      <p>Self-serve tools exist, but they start around $99 a month and expect you to set up and maintain the tracking yourself. When a competitor redesigns their site, the tracking quietly breaks.</p>
+      <p>Kestrel is the done-for-you version. I set it up, I fix it when a competitor's site changes, and the results come to your inbox.</p>
+    </div>
+  </section>
+
+  <section>
+    <span class="eyebrow">Watch it run</span>
+    <h2>A 46-second demo</h2>
+    <div class="video">
+      <div class="play">
+        <span class="dot" aria-hidden="true"><svg viewBox="0 0 10 12"><path d="M0 0 L10 6 L0 12 Z"/></svg></span>
+        <div>
+          <a class="vlink" href="https://youtu.be/9mdQ5QxLB10" target="_blank" rel="noopener"><strong>Watch the Kestrel demo on YouTube</strong></a>
+          <div class="muted" style="font-size:0.88rem">46 seconds, no sound needed</div>
+        </div>
+      </div>
+      <ol>
+        <li>A real run against the demo shop, sped up from 20 seconds</li>
+        <li>The email that arrives a moment later</li>
+        <li>How the daily check works, step by step</li>
+      </ol>
+    </div>
+  </section>
+
+  <section>
+    <span class="eyebrow">How it works</span>
+    <h2>Watch, spot, tell</h2>
+    <ol class="steps">
+      <li><span class="n">Every morning</span><h3>Watch</h3><p>Kestrel visits each competitor product page you chose, slowly and politely, and records the price and stock.</p></li>
+      <li><span class="n">Compared with yesterday</span><h3>Spot</h3><p>It flags price moves over 1%, items going out of or back in stock, and any competitor now cheaper than you.</p></li>
+      <li><span class="n">Only when something changed</span><h3>Tell</h3><p>You get one email listing every change. Quiet days send nothing. A Google Sheet with full history is optional.</p></li>
+    </ol>
+    <p class="muted" style="max-width:62ch">Each client gets their own private setup. Your competitor list, price history and email settings are never shared with anyone else or stored in public.</p>
+  </section>
+
+  <section>
+    <span class="eyebrow">What we tested</span>
+    <h2>Verified results</h2>
+    <p class="muted" style="max-width:62ch">Everything below was checked by hand before Kestrel was offered to anyone. No client results yet; this is the testing.</p>
+    <ul class="results">
+      <li><span class="what">Accuracy</span><span>On a 20-product run against Books to Scrape, a practice store built for testing, all 20 titles, prices and stock levels were correct.</span></li>
+      <li><span class="what">Only real changes</span><span>Changing two prices and one stock level on a test shop produced exactly one email, listing exactly those three changes.</span></li>
+      <li><span class="what">Quiet days</span><span>Two runs with no changes sent no email.</span></li>
+      <li><span class="what">Delivery</span><span>The digest arrived in a real Gmail inbox and read cleanly on a phone. The Google Sheet's latest prices matched the stored history.</span></li>
+      <li><span class="what">Nothing lost</span><span>If an email fails to send, its changes are carried into the next day's digest.</span></li>
+      <li><span class="what">Runs daily</span><span>Scheduled daily runs pass, and a full client setup was tested end to end, from the first run to restoring history on the second.</span></li>
+    </ul>
+  </section>
+
+  <section>
+    <span class="eyebrow">Pricing</span>
+    <h2>One-time setup, optional monthly care</h2>
+    <div class="tiers">
+      <div class="tier">
+        <h3>Starter</h3>
+        <div class="price">$150 <small>setup</small></div>
+        <ul><li>1 competitor site</li><li>Up to 100 products</li><li>Daily email</li></ul>
+        <div class="care">Monthly care $49/mo</div>
+      </div>
+      <div class="tier">
+        <h3>Standard</h3>
+        <div class="price">$250 <small>setup</small></div>
+        <ul><li>2–3 competitor sites</li><li>Up to 200 products</li><li>Daily email + Google Sheet</li></ul>
+        <div class="care">Monthly care $79/mo</div>
+      </div>
+      <div class="tier">
+        <h3>Premium</h3>
+        <div class="price">$400 <small>setup</small></div>
+        <ul><li>5+ competitor sites</li><li>Up to 300 products</li><li>Daily email + Google Sheet</li></ul>
+        <div class="care">Monthly care $129/mo</div>
+      </div>
+    </div>
+    <p class="muted" style="max-width:62ch">Monthly care covers fixes when a competitor's site changes, adding or removing products, and keeping an eye on the daily runs. Prefer a one-time look? A one-off competitor price and stock snapshot in a sheet is $75–150.</p>
+  </section>
+
+  <section>
+    <span class="eyebrow">Privacy and fair use</span>
+    <h2>Polite by design</h2>
+    <ul class="rules">
+      <li>Public product pages only. No logins, no CAPTCHA workarounds, no personal data.</li>
+      <li>Kestrel follows each site's robots.txt and waits at least 5 seconds between requests to the same site.</li>
+      <li>You confirm in writing that the sites you want tracked allow automated monitoring. If you're not sure, I'll check.</li>
+      <li>Amazon and other large marketplaces are not supported.</li>
+      <li>Your setup runs in its own private space. Passwords and email settings are stored as encrypted secrets, never in files.</li>
+    </ul>
+  </section>
+
+  <section class="cta">
+    <h2>Send two competitor links. Get a free sample.</h2>
+    <p>Pick two products you'd like to keep an eye on. I'll run Kestrel on them and send you a sample alert, so you can see exactly what you'd get before paying anything.</p>
+    <div class="contact">
+      <a class="email" id="email" href="mailto:kestrel.inquire@gmail.com?subject=Free%20sample%20alert">kestrel.inquire@gmail.com</a>
+      <button type="button" id="copy-email">Copy email</button>
+    </div>
+    <p class="note">Email the two product links and I'll reply within a day. No calls needed.</p>
+  </section>
+
+  <footer>Kestrel by Yahani · Know when your competitors move.</footer>
+</div>
+
+<script>
+document.getElementById("copy-email").addEventListener("click", function () {
+  var btn = this, text = document.getElementById("email").textContent.trim();
+  function done(msg) { btn.textContent = msg; setTimeout(function () { btn.textContent = "Copy email"; }, 2000); }
+  function fallback() {
+    var r = document.createRange(); r.selectNodeContents(document.getElementById("email"));
+    var sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(r);
+    done("Selected, press copy");
+  }
+  try { navigator.clipboard.writeText(text).then(function () { done("Copied"); }, fallback); } catch (e) { fallback(); }
+});
+</script>
+
+</body>
+</html>
