@@ -7,6 +7,9 @@ Google Sheet.
 
 <p align="center"><img src="docs/digest.png" width="360" alt="Example email digest on a phone: an undercut, a price rise and an out-of-stock item"></p>
 
+See it in action: [demo video](https://youtu.be/9mdQ5QxLB10) and
+[case study](https://yahani.github.io/kestrel/).
+
 - **Polite by design.** It obeys robots.txt, waits at least 5 s between requests to a site
   (longer if robots.txt asks), and sends an honest User-Agent with a contact address. It
   never logs in or bypasses CAPTCHAs or anti-bot systems.
