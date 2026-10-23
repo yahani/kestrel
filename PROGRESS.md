@@ -231,8 +231,11 @@ Approved 2026-10-18. Decisions:
     - Check config installed from the new URL and passed in the test client (39936609526)
       and the template (39936605148). `daily.yml` picks up the new URL on its next run.
     - Kept as `price-tracker`: the package name and `--version` output, the User-Agent and
-      robots.txt token, `~/.config/price-tracker/`, the local folder, and the template repo
-      `yahani/price-tracker-client-template`. Changing the package name needs a new release.
+      robots.txt token, `~/.config/price-tracker/` and the local folder. Changing the package
+      name needs a new release.
+    - The template repo was renamed the same day: `yahani/price-tracker-client-template` →
+      `yahani/kestrel-client-template` (still private and a template; the old URL redirects).
+      README, ARCHITECTURE.md and both `CLIENT_SETUP.md` files now use the new name.
   - The test repo's daily schedule now runs every day. To stop it:
     `gh workflow disable daily.yml -R yahani/test-client-tracker`. To remove the repo,
     delete it yourself; `gh` lacks the `delete_repo` scope.

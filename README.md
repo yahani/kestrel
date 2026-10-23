@@ -115,7 +115,7 @@ competitors. [docs/SETUP.md](docs/SETUP.md) has the commands for setting the sec
 > **Before tracking real products, use a private repository.** In a public repo, anyone can
 > download the `data` branch's database, which holds your own prices (`my_price`) and every
 > competitor observation. For client work, create a private repo from the **client template**
-> (`yahani/price-tracker-client-template`, private; its `CLIENT_SETUP.md` walks through
+> (`yahani/kestrel-client-template`, private; its `CLIENT_SETUP.md` walks through
 > setup, upgrades and handover). It installs this tracker at a pinned release tag (see
 > [CHANGELOG.md](CHANGELOG.md)) and refuses to run in a public repo. Private repos are free
 > at this volume too: about 2 Actions minutes a day against 2,000 a month.

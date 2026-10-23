@@ -426,7 +426,7 @@ A dry run writes no log, in keeping with "no writes".
 ## Client repositories (public package → private repos)
 
 This repo stays public: code, docs, and a demo on practice sites only. Each client gets a
-**private** repo created from the private template `yahani/price-tracker-client-template`.
+**private** repo created from the private template `yahani/kestrel-client-template`.
 Client data never touches this repo.
 
 ```mermaid
