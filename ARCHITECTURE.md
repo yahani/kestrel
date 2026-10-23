@@ -367,7 +367,7 @@ in the digest.
 ## Daily schedule (F10)
 
 `.github/workflows/daily.yml` runs at 06:17 UTC and from the **Run workflow** button, in the
-public repo `yahani/price-tracker`. Every Actions runner starts empty, so the database lives
+public repo `yahani/kestrel`. Every Actions runner starts empty, so the database lives
 on a separate `data` branch between runs:
 
 ```mermaid
@@ -431,7 +431,7 @@ Client data never touches this repo.
 
 ```mermaid
 flowchart LR
-    subgraph public["Public: yahani/price-tracker"]
+    subgraph public["Public: yahani/kestrel"]
         code["tracker package<br/>src/tracker"]
         tags["release tags<br/>v1.0.0, …"]
         demo["demo workflow<br/>(practice-site books)"]
@@ -452,7 +452,7 @@ flowchart LR
 
 | Data | Lives in |
 |---|---|
-| Tracker code, CHANGELOG, release tags | public `price-tracker` |
+| Tracker code, CHANGELOG, release tags | public `kestrel` |
 | Competitors, products, own prices (`config.yaml`) | the client's private repo |
 | Price history (`tracker.db` on `data`) | the client's private repo |
 | Run logs (artifacts, 30 days) | the client's private repo |

@@ -8,7 +8,7 @@ All notable changes to this project. The format follows
 ## [1.0.0] - 2026-10-18
 
 First release. It covers all twelve requirements in the spec (F1–F12) and is installable
-with `uv tool install git+https://github.com/yahani/price-tracker@v1.0.0`.
+with `uv tool install git+https://github.com/yahani/kestrel@v1.0.0`.
 
 ### Added
 - **Config (F1):** `config.yaml` validated with Pydantic, one readable error per field.
@@ -49,4 +49,4 @@ with `uv tool install git+https://github.com/yahani/price-tracker@v1.0.0`.
 - SMTP over TLS trusts certifi as well as the system store.
 - CI runs gitleaks over the full history; Dependabot checks dependencies weekly.
 
-[1.0.0]: https://github.com/yahani/price-tracker/releases/tag/v1.0.0
+[1.0.0]: https://github.com/yahani/kestrel/releases/tag/v1.0.0

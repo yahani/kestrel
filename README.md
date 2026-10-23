@@ -22,7 +22,7 @@ Google Sheet.
 Requires Python 3.12 and [uv](https://docs.astral.sh/uv/getting-started/installation/).
 
 ```sh
-git clone https://github.com/yahani/price-tracker.git && cd price-tracker
+git clone https://github.com/yahani/kestrel.git && cd kestrel
 uv sync
 uv run pytest
 ```
@@ -131,7 +131,7 @@ competitors. [docs/SETUP.md](docs/SETUP.md) has the commands for setting the sec
 - [ARCHITECTURE.md](ARCHITECTURE.md): how it fits together, with diagrams.
 - [PROGRESS.md](PROGRESS.md): build status against the spec's requirements.
 - [CHANGELOG.md](CHANGELOG.md): releases. Install one with
-  `uv tool install --python 3.12 git+https://github.com/yahani/price-tracker@v1.0.0`.
+  `uv tool install --python 3.12 git+https://github.com/yahani/kestrel@v1.0.0`.
 
 ## Development
 
