@@ -3,7 +3,7 @@
 Updated after every step. Requirement IDs refer to the spec (F1–F12). How the pieces fit
 together is in [ARCHITECTURE.md](ARCHITECTURE.md).
 
-_Last updated: 2026-10-20. All 12 requirements are built and **every acceptance check in the spec is ticked**._
+_Last updated: 2026-10-23. All 12 requirements are built and **every acceptance check in the spec is ticked**._
 
 ## 1. Done, by requirement
 
@@ -223,6 +223,16 @@ Approved 2026-10-18. Decisions:
     - After merging: CI on `main` passed here (39198617210), and Check config passed on
       `main` in the test client (39198808175) and the template (39198845972). The temporary
       branches are deleted, and no PRs are open.
+  - ✅ **Repo renamed 2026-10-23:** `yahani/price-tracker` → `yahani/kestrel`. GitHub
+    redirects the old URL, so earlier installs and clones keep working.
+    - Links and install commands now point at `yahani/kestrel` here (`74c0ec4`, CI
+      39936557009 passed), in the template (`7782242`) and in the test client (`05e2e5c`),
+      including `check.yml` and `TRACKER_REPO` in `daily.yml`.
+    - Check config installed from the new URL and passed in the test client (39936609526)
+      and the template (39936605148). `daily.yml` picks up the new URL on its next run.
+    - Kept as `price-tracker`: the package name and `--version` output, the User-Agent and
+      robots.txt token, `~/.config/price-tracker/`, the local folder, and the template repo
+      `yahani/price-tracker-client-template`. Changing the package name needs a new release.
   - The test repo's daily schedule now runs every day. To stop it:
     `gh workflow disable daily.yml -R yahani/test-client-tracker`. To remove the repo,
     delete it yourself; `gh` lacks the `delete_repo` scope.
